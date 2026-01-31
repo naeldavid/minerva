@@ -1,0 +1,15 @@
+[Unit]
+Description=Raspberry Pi Dashboard Service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/rpi_server/server
+ExecStart=/usr/bin/python3 /home/pi/rpi_server/server/app.py
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/pi/rpi_server/server/config/settings.env
+
+[Install]
+WantedBy=multi-user.target
