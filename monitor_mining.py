@@ -12,7 +12,7 @@ import signal
 import sys
 
 class LightweightMiningMonitor:
-    def __init__(self, process_name="xmrig", cpu_threshold=50.0):
+    def __init__(self, process_name="cpuminer-ulti", cpu_threshold=50.0):
         self.process_name = process_name
         self.cpu_threshold = cpu_threshold
         self.mining_process = None
@@ -106,7 +106,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Lightweight Mining Process Monitor")
-    parser.add_argument("--process", default="xmrig", help="Process name to monitor")
+    parser.add_argument("--process", default="cpuminer-ulti", help="Process name to monitor")
     parser.add_argument("--threshold", type=float, default=50.0, help="CPU threshold percentage")
     
     args = parser.parse_args()

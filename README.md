@@ -3,7 +3,7 @@
 **Minerva** (Miner + EVA) is a lightweight web-based control panel for Raspberry Pi Zero that combines cryptocurrency mining management with an integrated AI assistant. It provides:
 - AI study assistant (EVA) via external free AI API
 - Real-time system performance monitoring
-- Live crypto mining statistics with XMRig integration
+- Live crypto mining statistics with cpuminer-ulti integration
 - Continuous operation with minimal resource usage on low-power devices
 
 ## Features
@@ -34,8 +34,8 @@ minerva/
 ├── manage.py                       # Service management script
 ├── monitor_mining.py               # Mining monitoring with CPU throttling
 ├── verify_optimization.py          # Performance verification utility
-├── test_xmrig_compatibility.py     # XMRig version compatibility tester
-├── xmrig_quick_ref.py              # XMRig configuration reference
+├── test_miner_compatibility.py     # Miner API compatibility tester
+├── miner_quick_ref.py              # Cpuminer-ulti configuration reference
 ├── DEPLOYMENT_CHECKLIST.py         # Deployment verification checklist
 ├── requirements.txt                # Python dependencies (Flask, psutil, requests, python-dotenv)
 ├── LICENSE                         # Project license
@@ -52,7 +52,21 @@ minerva/
 │   ├── deployment.md               # Deployment guide
 │   └── modules.md                  # Module documentation
 ├── templates/
-│  minerva
+│   └── dashboard.html              # Main dashboard template
+├── static/
+│   ├── style.css                   # Dashboard styling
+│   └── app.js                      # Frontend JavaScript
+└── services/
+    ├── rpi-dashboard.service       # systemd service file
+    └── startup.sh                  # Service startup script
+```
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd minerva
 ```
 
 2. Run the installation script:
@@ -79,67 +93,56 @@ nano config/settings.env
 python app.py
 ```
 
-   **Production with systemd:**.txt
-```
-
-3. Configure environment variables:
-```bash
-cp config/settings.env config/settings.env.local
-# Edit config/settings.env.local with your settings
-```
-
-4. Start the server:
-```bash
-python app.py
-```
-
-Or use the systemd service:
+   **Production with systemd:**
 ```bash
 sudo ./manage.py setup
 sudo systemctl start rpi-dashboard.service
 ```
 
 ## Configuration
-**Flask settings** - Port, debug mode, host
+
+Edit `config/settings.env` to configure:
+
+- **Flask settings** - Port, debug mode, host
 - **AI API settings** - API URL, authentication key, model configuration
-- **XMRig API settings** - Host and port for mining API
+- **Miner API settings** - cpuminer-ulti API endpoint configuration
 - **Logging preferences** - Log level and output configuration
 - **Mining thresholds** - CPU usage limits for throttling
 
-### XMRig Compatibility
+### Cpuminer-ulti Integration
 
-Minerva is compatible with **XMRig 2.8.3 and newer** versions, including:
-- **XMRig 2.8.3** (legacy versions)
-- **Raspberry Pi optimized builds** (rPi-xmrig)
-- **XMRig 5.x+** (modern versions)
+Minerva is designed to work with **cpuminer-ulti**, an optimized CPU miner for Monero. The miner provides:
+- Statistics API for real-time monitoring
+- Lightweight process suitable for Raspberry Pi
+- Support for GPU acceleration (if available)
 
-The API handler automatically detects and parses response formats from both old and new XMRig versions. Test your specific version with `test_xmrig_compatibility.py`
-- **XMRig 5.x+** (newer versions)
-
-The API handler automatically detects and parses response formats from both old and new XMRig versions.
-
-**To enable XMRig API:**
+To enable the API for stats collection, start cpuminer-ulti with the `--api-bind` parameter:
 ```bash
-# For XMRig 2.8.3
-xmrig -o pool.moneroocean.stream:10128 -u YOUR_ADDRESS --api-host 127.0.0.1 --api-port 18080
+cpuminer-ulti --cpu-threads=1 --api-bind=127.0.0.1:4048
+```
 
-# For newer versions
-xmrig -o pool.moneroocean.stream:10128 -u YOUR_ADDRESS --api-host 0.0.0.0 --api-port 18080
+**To enable cpuminer-ulti API:**
+```bash
+# Basic setup with API enabled on localhost:4048
+cpuminer-ulti --cpu-threads=1 --api-bind=127.0.0.1:4048
+
+# With pool configuration
+cpuminer-ulti --cpu-threads=1 -o stratum+tcp://pool.moneroocean.stream:10128 \
+  -u YOUR_MONERO_ADDRESS --api-bind=127.0.0.1:4048
 ```
 
 **Test API compatibility:**
 ```bash
-python3 test_xmrig_compatibility.py
+python3 test_miner_compatibility.py
 ```
+Tests connection to cpuminer-ulti API and parses mining statistics.
 
-Thi**Access the dashboard** at `http://<raspberry-pi-ip>:5000`
+## Usage
+
+1. **Access the dashboard** at `http://<raspberry-pi-ip>:5000`
 2. **Chat with EVA** - Use the AI assistant interface for questions and help
 3. **Monitor system stats** - View real-time CPU, memory, temperature, and uptime
 4. **Track mining** - Monitor hashrate, total mined XMR, miner uptime, and daily yield estimates
-
-1. Access the dashboard at `http://<raspberry-pi-ip>:5000`
-2. Use the chat interface to interact with the AI assistant
-3. Monitor system and mining statistics in real-time
 
 ## Management
 
@@ -170,30 +173,40 @@ sudo ./manage.py logs -n 100
 To pull the latest changes from the repository:
 
 ```bash
-gitUtilities
+git pull origin main
+pip install -r requirements.txt
+sudo systemctl restart rpi-dashboard.service
+```
+
+## Utilities
 
 The following utility scripts are included to help with deployment and testing:
 
 - **`verify_optimization.py`** - Verify performance optimizations and resource usage
-- **`test_xmrig_compatibility.py`** - Test XMRig API compatibility with your miner version
-- **`xmrig_quick_ref.py`** - Quick reference for XMRig command-line configuration
+- **`test_miner_compatibility.py`** - Test cpuminer-ulti API compatibility
+- **`miner_quick_ref.py`** - Quick reference for cpuminer-ulti command-line configuration
 - **`DEPLOYMENT_CHECKLIST.py`** - Automated deployment verification checklist
 - **`monitor_mining.py`** - Monitor mining with automatic CPU throttling
-1. **Core UI + Server** - Dashboard layout, live stats
-2. **AI Integration** - Chat interface with AI API
-3. **Minin & Verification
 
-**Test XMRig API compatibility:**
+## Testing & Verification
+
+**Test miner API compatibility:**
 ```bash
-python3 test_xmrig_compatibility.py
+python3 test_miner_compatibility.py
 ```
-Tests parsing of both XMRig 2.8.3 and newer format responses with your live miner.
+Tests connection to cpuminer-ulti API and validates response parsing.
 
 **Verify performance optimizations:**
 ```bash
 python3 verify_optimization.py
 ```
-Optimizations
+
+**Run deployment checklist:**
+```bash
+python3 DEPLOYMENT_CHECKLIST.py
+```
+
+## Performance Optimizations
 
 Minerva is optimized for low-power devices like Raspberry Pi Zero:
 
@@ -203,7 +216,9 @@ Minerva is optimized for low-power devices like Raspberry Pi Zero:
 - **Production Flask configuration** with debug disabled
 - **Efficient codebase** (~27.8 KB core)
 - **Low memory footprint** (40-50 MB runtime)
-- **Single-co & Management
+- **Single-core optimized** for Raspberry Pi Zero
+
+## Monitoring & Management
 
 **Monitor mining with automatic CPU throttling:**
 ```bash
@@ -243,15 +258,3 @@ Contributions are welcome! Please ensure all changes maintain the performance op
 ## License
 
 See [LICENSE](LICENSE) file for details.
-# With custom CPU threshold (default 50%)
-python3 monitor_mining.py --threshold 65
-```
-
-View service logs:
-```bash
-sudo journalctl -u rpi-dashboard.service -f
-```
-
-## Future Expansion
-
-- Simple user authentication (username + password)

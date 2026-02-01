@@ -81,7 +81,7 @@ DEPLOYMENT STEPS:
    Edit config/settings.env:
    • Set SECRET_KEY to a random string
    • Configure AI_API_URL if using AI
-   • Set XMRIG_API_URL if mining
+   • Set MINER_API_URL to your cpuminer-ulti API endpoint
 
 4. INSTALL SERVICE
    ./install.sh

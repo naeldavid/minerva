@@ -6,29 +6,25 @@ from typing import Dict, Any
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
-# Default XMRig API endpoint
-XMRIG_API_URL = "http://localhost:18080/api.json"
+# Default cpuminer-ulti API endpoint
+MINER_API_URL = "http://localhost:4048/api/get_stats"
 
 # Global session for connection reuse
 session = requests.Session()
 session.timeout = 5
 
-# Default XMRig API endpoint
-XMRIG_API_URL = "http://localhost:18080/api.json"
-
-def get_miner_stats(api_url: str = XMRIG_API_URL) -> Dict[str, Any]:
+def get_miner_stats(api_url: str = MINER_API_URL) -> Dict[str, Any]:
     """
-    Get mining statistics from XMRig API
-    Compatible with XMRig 2.8.3+ (including rPi-xmrig-gcc7.3.0)
+    Get mining statistics from cpuminer-ulti API
     
     Args:
-        api_url: URL to the XMRig API endpoint
+        api_url: URL to the cpuminer-ulti API endpoint (default: http://localhost:4048/api/get_stats)
         
     Returns:
         Dictionary containing mining statistics
     """
     try:
-        # Make request to XMRig API using reusable session
+        # Make request to cpuminer-ulti API using reusable session
         response = session.get(api_url, timeout=5)
         response.raise_for_status()
         
@@ -42,47 +38,22 @@ def get_miner_stats(api_url: str = XMRIG_API_URL) -> Dict[str, Any]:
             'estimated_daily_yield': 0
         }
         
-        # XMRig 2.8.3 and newer API response handling
-        # Hashrate (current 1-minute average) - supports both old and new formats
-        hashrate_value = 0
+        # cpuminer-ulti API response handling
+        # The API typically returns: hashrate (H/s), shares_valid, shares_rejected, uptime (seconds)
+        if 'hashrate' in data:
+            miner_stats['hashrate'] = float(data['hashrate'])
         
-        # New format: hashrate.total array
-        if 'hashrate' in data and isinstance(data['hashrate'], dict):
-            if 'total' in data['hashrate']:
-                hashrate_raw = data['hashrate']['total']
-                if isinstance(hashrate_raw, list) and len(hashrate_raw) > 0:
-                    hashrate_value = hashrate_raw[0]  # 1-minute average
-                elif isinstance(hashrate_raw, (int, float)):
-                    hashrate_value = hashrate_raw
+        # Total valid shares accepted
+        if 'shares_valid' in data:
+            miner_stats['total_mined'] = int(data['shares_valid'])
+        elif 'accepted' in data:
+            miner_stats['total_mined'] = int(data['accepted'])
         
-        # Old format (XMRig 2.8.3): hashrate as direct number
-        elif 'hashrate' in data and isinstance(data['hashrate'], (int, float)):
-            hashrate_value = data['hashrate']
-        
-        miner_stats['hashrate'] = hashrate_value
-        
-        # Total shares / hashes accepted
-        # XMRig 2.8.3: results.shares_good or results.hashes_good
-        # Newer: results.accepted or results.diff_current
-        if 'results' in data:
-            if 'shares_good' in data['results']:
-                miner_stats['total_mined'] = data['results']['shares_good']
-            elif 'hashes_good' in data['results']:
-                miner_stats['total_mined'] = data['results']['hashes_good']
-            elif 'accepted' in data['results']:
-                miner_stats['total_mined'] = data['results']['accepted']
-            elif 'diff_current' in data['results']:
-                miner_stats['total_mined'] = data['results']['diff_current']
-        
-        # Uptime - handle both formats
-        # XMRig 2.8.3: connection.uptime or uptime at root level
-        uptime_value = 0
-        if 'connection' in data and 'uptime' in data['connection']:
-            uptime_value = data['connection']['uptime']
-        elif 'uptime' in data:
-            uptime_value = data['uptime']
-        
-        miner_stats['uptime'] = uptime_value
+        # Uptime in seconds
+        if 'uptime' in data:
+            miner_stats['uptime'] = int(data['uptime'])
+        elif 'elapsed' in data:
+            miner_stats['uptime'] = int(data['elapsed'])
         
         # Estimated daily yield (simplified calculation)
         if miner_stats['hashrate'] > 0:
@@ -93,7 +64,7 @@ def get_miner_stats(api_url: str = XMRIG_API_URL) -> Dict[str, Any]:
         
     except requests.exceptions.ConnectionError as e:
         logger.error(f"Could not connect to miner API at {api_url}")
-        raise Exception(f"Could not connect to miner. Is XMRig running on {api_url}?")
+        raise Exception(f"Could not connect to miner. Is cpuminer-ulti running with API enabled on {api_url}?")
     except requests.exceptions.Timeout as e:
         logger.error(f"Timeout connecting to miner API: {e}")
         raise Exception("Miner API request timed out")

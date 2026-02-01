@@ -30,11 +30,12 @@ start_server() {
 # Function to start the mining service
 start_mining() {
     echo "Starting mining service..."
-    if is_running "xmrig"; then
+    if is_running "cpuminer-ulti"; then
         echo "Mining already running"
     else
-        # Start xmrig with conservative settings for Pi Zero
-        nohup xmrig --config=/home/pi/xmrig/config.json > /dev/null 2>&1 &
+        # Start cpuminer-ulti with conservative settings for Pi Zero
+        # Enable API on localhost:4048 for stats collection
+        nohup cpuminer-ulti --cpu-threads=1 --api-bind=127.0.0.1:4048 > /dev/null 2>&1 &
         echo "Mining started"
     fi
 }
