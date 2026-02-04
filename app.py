@@ -88,34 +88,40 @@ def health_check():
         }
     })
 
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon"""
+    return '', 204
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """API endpoint for AI chat"""
-    if ai_client_available:
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "Invalid JSON"}), 400
-            
-            user_message = data.get('message', '').strip()
-            
-            if not user_message:
-                return jsonify({"error": "No message provided"}), 400
-            
-            # Validate message length
-            if len(user_message) > 2000:
-                return jsonify({"error": "Message too long (max 2000 characters)"}), 400
-            
-            # Process the AI request
-            response = process_ai_request(user_message)
-            return jsonify({"response": response})
-        except ValueError:
+    if not ai_client_available:
+        return jsonify({"error": "AI client module not available"}), 503
+    
+    try:
+        data = request.get_json()
+        if not data:
             return jsonify({"error": "Invalid JSON"}), 400
-        except Exception as e:
-            logger.error(f"Error processing chat request: {e}")
-            return jsonify({"error": "Failed to process chat request"}), 500
-    else:
-        return jsonify({"error": "AI client module not available"}), 500
+        
+        user_message = data.get('message', '').strip()
+        
+        if not user_message:
+            return jsonify({"error": "No message provided"}), 400
+        
+        # Validate message length
+        if len(user_message) > 2000:
+            return jsonify({"error": "Message too long (max 2000 characters)"}), 400
+        
+        # Process the AI request
+        response = process_ai_request(user_message)
+        return jsonify({"response": response})
+    except ValueError as e:
+        logger.error(f"AI request error: {e}")
+        return jsonify({"error": "AI service unavailable. Please check if Ollama is running."}), 503
+    except Exception as e:
+        logger.error(f"Error processing chat request: {e}")
+        return jsonify({"error": "Failed to process chat request"}), 500
 
 if __name__ == '__main__':
     # Run with minimal configuration for Raspberry Pi Zero

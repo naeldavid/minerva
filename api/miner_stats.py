@@ -10,7 +10,7 @@ logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
 
 # Get duino-coin configuration from environment
-DUINO_COIN_PATH = os.environ.get('DUINO_COIN_PATH', '/Users/nae1/Dev/duino-coin')
+DUINO_COIN_PATH = os.environ.get('DUINO_COIN_PATH', '/home/pi/duino-coin')
 DUINO_COIN_USERNAME = os.environ.get('DUINO_COIN_USERNAME', '')
 
 def get_miner_stats() -> Dict[str, Any]:
