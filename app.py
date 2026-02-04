@@ -117,7 +117,6 @@ def chat():
         response = process_ai_request(user_message)
         return jsonify({"response": response})
     except ValueError as e:
-        logger.error(f"AI request error: {e}")
         return jsonify({"error": "AI service unavailable. Please check if Ollama is running."}), 503
     except Exception as e:
         logger.error(f"Error processing chat request: {e}")
