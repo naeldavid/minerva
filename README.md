@@ -30,42 +30,35 @@
 
 ```
 minerva/
-├── app.py                          # Main Flask application
-├── manage.py                       # Service management script
-├── monitor_mining.py               # Mining monitoring with CPU throttling
-├── verify_optimization.py          # Performance verification utility
-├── test_miner_compatibility.py     # Miner API compatibility tester
-├── miner_quick_ref.py              # Cpuminer-ulti configuration reference
-├── DEPLOYMENT_CHECKLIST.py         # Deployment verification checklist
-├── requirements.txt                # Python dependencies (Flask, psutil, requests, python-dotenv)
-├── LICENSE                         # Project license
-├── install.sh                      # Installation script
-├── README.md                       # This file
+├── app.py                   # Main Flask application
+├── manage.py                # Service management script
+├── monitor_mining.py        # Mining monitoring with CPU throttling
+├── requirements.txt         # Python dependencies
+├── LICENSE                  # Project license
+├── install.sh               # Installation script
+├── README.md                # This file
+├── .gitignore               # Git ignore rules
 ├── api/
-│   ├── ai_client.py                # AI API client for EVA assistant
-│   ├── system_stats.py             # System statistics collection
-│   └── miner_stats.py              # Mining statistics collection
+│   ├── ai_client.py         # AI API client for EVA assistant
+│   ├── system_stats.py      # System statistics collection
+│   └── miner_stats.py       # Duino-Coin statistics reader
 ├── config/
-│   └── settings.env                # Environment configuration file
-├── docs/
-│   ├── api.md                      # API documentation
-│   ├── deployment.md               # Deployment guide
-│   └── modules.md                  # Module documentation
+│   └── settings.env         # Environment configuration file
 ├── templates/
-│   └── dashboard.html              # Main dashboard template
+│   └── dashboard.html       # Main dashboard template
 ├── static/
-│   ├── style.css                   # Dashboard styling
-│   └── app.js                      # Frontend JavaScript
+│   ├── style.css            # Dashboard styling
+│   └── app.js               # Frontend JavaScript
 └── services/
-    ├── rpi-dashboard.service       # systemd service file
-    └── startup.sh                  # Service startup script
+    ├── rpi-dashboard.service # systemd service file
+    └── startup.sh            # Service startup script
 ```
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone <https://github.com/naeldavid/minerva.git
 cd minerva
 ```
 
@@ -75,152 +68,154 @@ chmod +x install.sh
 ./install.sh
 ```
 
-   Or manually install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
 3. Configure environment variables:
 ```bash
-# Edit config/settings.env with your API keys and settings
 nano config/settings.env
+```
+
+**Required configuration:**
+```bash
+# Generate a strong secret key
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+
+# Configure AI API (Ollama)
+AI_API_URL=http://localhost:11434/api/generate
+AI_MODEL=naeldv/Eva
+
+# Configure Duino-Coin
+DUINO_COIN_PATH=/home/pi/duino-coin
+DUINO_COIN_USERNAME=your-username
 ```
 
 4. Start the server:
 
-   **Development mode:**
+**Direct mode:**
 ```bash
-python app.py
+python3 app.py
+# Access at http://localhost:5000
 ```
 
-   **Production with systemd:**
+**Production with systemd:**
 ```bash
-sudo ./manage.py setup
+sudo python3 manage.py setup
 sudo systemctl start rpi-dashboard.service
 ```
 
 ## Configuration
 
-Edit `config/settings.env` to configure:
+Edit `config/settings.env`:
 
-- **Flask settings** - Port, debug mode, host
-- **AI API settings** - API URL, authentication key, model configuration
-- **Duino-Coin settings** - Path to duino-coin directory, username
-- **Logging preferences** - Log level and output configuration
-
-**IMPORTANT SECURITY:** Generate a strong secret key before deployment:
 ```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
+# Flask Settings
+SECRET_KEY=your-secret-key-here  # Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+FLASK_ENV=production
+FLASK_DEBUG=False
+
+# AI API Settings (Ollama)
+AI_API_URL=http://localhost:11434/api/generate
+AI_API_KEY=
+AI_MODEL=naeldv/Eva
+
+# Miner Settings (Duino-Coin)
+DUINO_COIN_PATH=/home/pi/duino-coin
+DUINO_COIN_USERNAME=your-username
+
+# Logging
+LOG_LEVEL=WARNING
 ```
 
 ### Duino-Coin Integration
 
-Minerva is designed to work with **Duino-Coin**, a cryptocurrency that can be mined on low-power devices like Raspberry Pi.
+Minerva reads mining statistics from Duino-Coin configuration files.
 
 **Setup:**
-1. Install Duino-Coin miner in `/Dev/duino-coin` (or configure path in settings.env)
-2. Configure your Duino-Coin username in `config/settings.env`
-3. Start the Duino-Coin miner separately
-4. Minerva will read mining statistics from the Duino-Coin configuration
-
-**Configuration:**
 ```bash
-# In config/settings.env
-DUINO_COIN_PATH=/Users/nae1/Dev/duino-coin
-DUINO_COIN_USERNAME=your-username
+# 1. Install Duino-Coin
+cd ~
+git clone https://github.com/revoxhere/duino-coin
+cd duino-coin
+python3 PC_Miner.py  # Configure username and settings
+
+# 2. Update Minerva config
+nano ~/minerva/config/settings.env
+# Set: DUINO_COIN_PATH=/home/pi/duino-coin
+# Set: DUINO_COIN_USERNAME=your-username
+
+# 3. Start both
+python3 ~/duino-coin/PC_Miner.py &  # Start miner
+python3 ~/minerva/app.py             # Start dashboard
 ```
 
 ## Usage
 
-1. **Access the dashboard** at `http://<raspberry-pi-ip>:5000`
-2. **Chat with EVA** - Use the AI assistant interface for questions and help
-3. **Monitor system stats** - View real-time CPU, memory, temperature, and uptime
-4. **Track mining** - Monitor hashrate, total mined XMR, miner uptime, and daily yield estimates
+**Access:** `http://localhost:5000` (localhost only for security)
+
+**For external access:** Use SSH tunnel or reverse proxy:
+```bash
+# SSH tunnel from your computer
+ssh -L 5000:localhost:5000 pi@raspberry-pi-ip
+# Then access http://localhost:5000 on your computer
+```
+
+**Features:**
+- **AI Chat** - Ask EVA questions via Ollama
+- **System Stats** - Real-time CPU, RAM, temperature, uptime
+- **Mining Stats** - Hashrate, DUCO mined, thread count
 
 ## Management
 
-The dashboard can be managed using the provided management script:
-
 ```bash
-# Start the service
-sudo ./manage.py start
-
-# Stop the service
-sudo ./manage.py stop
-
-# Restart the service
-sudo ./manage.py restart
-
-# Check service status
-sudo ./manage.py status
+# Service control
+sudo python3 manage.py start|stop|restart|status
 
 # View logs
-sudo ./manage.py logs
+sudo journalctl -u rpi-dashboard.service -f
 
-# View last 100 lines of logs
-sudo ./manage.py logs -n 100
+# Monitor mining with CPU throttling
+python3 monitor_mining.py --threshold 50
 ```
 
 ## Updating
 
-To pull the latest changes from the repository:
-
 ```bash
-git pull origin main
-pip install -r requirements.txt
+cd ~/minerva
+git pull
+pip3 install -r requirements.txt
 sudo systemctl restart rpi-dashboard.service
 ```
 
-## Utilities
+## Security
 
-The following utility scripts are included:
+- **Localhost only** - Binds to 127.0.0.1 by default
+- **Input validation** - All user inputs sanitized
+- **XSS protection** - Content Security Policy headers
+- **Updated dependencies** - Flask >=3.0.0, requests >=2.32.0
+- **No default keys** - Auto-generates secure SECRET_KEY
 
-- **`monitor_mining.py`** - Monitor mining with automatic CPU throttling
-
-## Performance Optimizations
-
-Minerva is optimized for low-power devices like Raspberry Pi Zero:
-
-- **Non-blocking API calls** with connection pooling
-- **Lightweight polling** (3-second updates) instead of WebSockets
-- **Minimal logging** (WARNING level only) to reduce I/O overhead
-- **Production Flask configuration** with debug disabled
-- **Efficient codebase** (~27.8 KB core)
-- **Low memory footprint** (40-50 MB runtime)
-- **Single-core optimized** for Raspberry Pi Zero
-
-## Monitoring & Management
-
-**Monitor mining with automatic CPU throttling:**
+**For external access:** Use reverse proxy with authentication:
 ```bash
-# Run the mining monitor (default 50% CPU threshold)
-python3 monitor_mining.py
-
-# With custom CPU threshold
-python3 monitor_mining.py --threshold 65
+# Example nginx config
+location / {
+    proxy_pass http://127.0.0.1:5000;
+    auth_basic "Restricted";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+}
 ```
 
-**View service logs:**
-```bash
-sudo journalctl -u rpi-dashboard.service -f
-```
+## Performance
 
-**Manage the service:**
-```bash
-# Start/stop/restart
-sudo systemctl start rpi-dashboard.service
-sudo systemctl stop rpi-dashboard.service
-sudo systemctl restart rpi-dashboard.service
+**Optimized for Raspberry Pi Zero W:**
+- **Memory:** 20-30MB (dashboard) + 30-50MB (Duino-Coin) = ~55-75MB total
+- **CPU:** <5% idle, 50-70% when mining
+- **Codebase:** ~25KB Python
+- **Polling:** 3-second updates (stops when page hidden)
+- **No WebSockets:** Simple HTTP polling
+- **Minimal logging:** WARNING level only
 
-# Check status
-sudo systemctl status rpi-dashboard.service
-```
-
-## Documentation
-
-- [API Documentation](docs/api.md) - API endpoints and responses
-- [Deployment Guide](docs/deployment.md) - Production deployment instructions
-- [Module Documentation](docs/modules.md) - Internal module reference
+**Expected performance:**
+- Dashboard load: 2-3 seconds
+- Update latency: <500ms
+- Duino-Coin hashrate: 1-3 kH/s (1 thread)
 
 ## Contributing
 
