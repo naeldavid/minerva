@@ -3,91 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="description" content="Raspberry Pi Study Assistant and Mining Dashboard">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
-    <title>RPI SA</title>
+    <title>Minerva</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js" integrity="sha384-QgJZstSKj9bLZwJZZJZZJZZJZZJZZJZZJZZJZZJZZJZZJZZJZZJZZJZZJZZJZZZ" crossorigin="anonymous" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js" defer></script>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo-container">
-                <svg class="raspberry-icon" viewBox="0 0 24 24" width="32" height="32">
-                    <circle cx="12" cy="12" r="10" fill="#c44536"/>
-                    <circle cx="8" cy="8" r="1.5" fill="white"/>
-                    <circle cx="16" cy="8" r="1.5" fill="white"/>
-                    <rect x="10" y="12" width="4" height="6" fill="white"/>
-                </svg>
-                <h1>Study Assistant</h1>
-            </div>
-        </header>
-
-        <!-- Main Content -->
         <main class="main-content">
-            <!-- Chat Interface -->
             <section class="chat-section">
-                <div id="chat-history" class="chat-history">
-                    <div class="message assistant-message">
-                        <div class="message-content">
-                            <p>Hello! I'm your Raspberry Pi Study Assistant. How can I help you today?</p>
-                        </div>
-                    </div>
-                </div>
-                
+                <div id="chat-history" class="chat-history"></div>
                 <form id="chat-form" class="chat-input-area">
-                    <input type="text" id="user-input" placeholder="Ask me anything..." autocomplete="off" maxlength="2000" required aria-label="Chat message input">
-                    <button type="submit" aria-label="Send message">Send</button>
+                    <input type="text" id="user-input" placeholder="Ask me anything..." autocomplete="off" maxlength="2000" required>
+                    <button type="submit">Send</button>
                 </form>
             </section>
         </main>
 
-        <!-- Widgets -->
         <aside class="widgets">
-            <!-- System Stats Widget -->
-            <section class="widget system-stats" aria-label="System Status">
-                <h2>System Status</h2>
+            <section class="widget">
+                <h2>System</h2>
                 <div class="stats-grid">
                     <div class="stat-item">
-                        <span class="stat-label">CPU Usage</span>
-                        <span id="cpu-usage" class="stat-value" aria-live="polite">--%</span>
+                        <span class="stat-label">CPU</span>
+                        <span id="cpu-usage" class="stat-value">--%</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label">Memory Usage</span>
-                        <span id="memory-usage" class="stat-value" aria-live="polite">--%</span>
+                        <span class="stat-label">RAM</span>
+                        <span id="memory-usage" class="stat-value">--%</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label">Temperature</span>
-                        <span id="temperature" class="stat-value" aria-live="polite">--°C</span>
+                        <span class="stat-label">Temp</span>
+                        <span id="temperature" class="stat-value">--°C</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Uptime</span>
-                        <span id="uptime" class="stat-value" aria-live="polite">-- hrs</span>
+                        <span id="uptime" class="stat-value">--h</span>
                     </div>
                 </div>
             </section>
 
-            <!-- Mining Stats Widget -->
-            <section class="widget mining-stats" aria-label="Mining Statistics">
-                <h2>Mining Statistics</h2>
+            <section class="widget">
+                <h2>Mining</h2>
                 <div class="stats-grid">
                     <div class="stat-item">
-                        <span class="stat-label">Hashrate</span>
-                        <span id="hashrate" class="stat-value" aria-live="polite">-- H/s</span>
+                        <span class="stat-label">H/s</span>
+                        <span id="hashrate" class="stat-value">--</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label">Total Mined</span>
-                        <span id="total-mined" class="stat-value" aria-live="polite">-- DUCO</span>
+                        <span class="stat-label">Mined</span>
+                        <span id="total-mined" class="stat-value">--</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label">Miner Uptime</span>
-                        <span id="miner-uptime" class="stat-value" aria-live="polite">-- hrs</span>
+                        <span class="stat-label">Uptime</span>
+                        <span id="miner-uptime" class="stat-value">--h</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label">Daily Yield</span>
-                        <span id="daily-yield" class="stat-value" aria-live="polite">-- DUCO</span>
+                        <span class="stat-label">Daily</span>
+                        <span id="daily-yield" class="stat-value">--</span>
                     </div>
                 </div>
             </section>

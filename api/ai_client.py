@@ -62,12 +62,11 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
     if AI_API_KEY:
         headers['Authorization'] = f'Bearer {AI_API_KEY}'
     
-    # Prepare the payload
+    # Prepare the payload for Ollama API
     payload = {
         "model": AI_MODEL,
         "prompt": prompt,
-        "stream": False,
-        "max_tokens": max_tokens
+        "stream": False
     }
     
     try:
@@ -85,14 +84,13 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         # Parse response
         data = response.json()
         
-        # Extract response text
-        # This depends on the API format - adjust as needed
-        if 'choices' in data and len(data['choices']) > 0:
+        # Parse Ollama response format
+        if 'response' in data:
+            response_text = data['response']
+        elif 'choices' in data and len(data['choices']) > 0:
             if 'message' in data['choices'][0]:
-                # Chat completion format
                 response_text = data['choices'][0]['message']['content']
             elif 'text' in data['choices'][0]:
-                # Completion format
                 response_text = data['choices'][0]['text']
             else:
                 response_text = str(data)
