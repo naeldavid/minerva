@@ -58,7 +58,7 @@ minerva/
 
 1. Clone the repository:
 ```bash
-git clone <https://github.com/naeldavid/minerva.git
+git clone https://github.com/naeldavid/minerva.git
 cd minerva
 ```
 
@@ -80,7 +80,7 @@ SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 
 # Configure AI API (Ollama)
 AI_API_URL=http://localhost:11434/api/generate
-AI_MODEL=naeldv/Eva
+AI_MODEL=llama2
 
 # Configure Duino-Coin
 DUINO_COIN_PATH=/home/pi/duino-coin
@@ -92,7 +92,7 @@ DUINO_COIN_USERNAME=your-username
 **Direct mode:**
 ```bash
 python3 app.py
-# Access at http://localhost:5000
+# Access at http://<raspberry-pi-ip>:5000
 ```
 
 **Production with systemd:**
@@ -114,7 +114,7 @@ FLASK_DEBUG=False
 # AI API Settings (Ollama)
 AI_API_URL=http://localhost:11434/api/generate
 AI_API_KEY=
-AI_MODEL=naeldv/Eva
+AI_MODEL=llama2
 
 # Miner Settings (Duino-Coin)
 DUINO_COIN_PATH=/home/pi/duino-coin
@@ -132,7 +132,7 @@ Minerva reads mining statistics from Duino-Coin configuration files.
 ```bash
 # 1. Install Duino-Coin
 cd ~
-git clone https://github.com/revoxhere/duino-coin
+git clone https://github.com/revoxhere/duino-coin.git
 cd duino-coin
 python3 PC_Miner.py  # Configure username and settings
 
@@ -148,14 +148,7 @@ python3 ~/minerva/app.py             # Start dashboard
 
 ## Usage
 
-**Access:** `http://localhost:5000` (localhost only for security)
-
-**For external access:** Use SSH tunnel or reverse proxy:
-```bash
-# SSH tunnel from your computer
-ssh -L 5000:localhost:5000 pi@raspberry-pi-ip
-# Then access http://localhost:5000 on your computer
-```
+**Access:** `http://<raspberry-pi-ip>:5000` (accessible on local network)
 
 **Features:**
 - **AI Chat** - Ask EVA questions via Ollama
@@ -186,21 +179,13 @@ sudo systemctl restart rpi-dashboard.service
 
 ## Security
 
-- **Localhost only** - Binds to 127.0.0.1 by default
+- **Local network only** - Binds to 0.0.0.0 (accessible on LAN)
 - **Input validation** - All user inputs sanitized
 - **XSS protection** - Content Security Policy headers
 - **Updated dependencies** - Flask >=3.0.0, requests >=2.32.0
 - **No default keys** - Auto-generates secure SECRET_KEY
 
-**For external access:** Use reverse proxy with authentication:
-```bash
-# Example nginx config
-location / {
-    proxy_pass http://127.0.0.1:5000;
-    auth_basic "Restricted";
-    auth_basic_user_file /etc/nginx/.htpasswd;
-}
-```
+**Note:** Only use on trusted local networks. For internet exposure, add firewall rules or reverse proxy with authentication.
 
 ## Performance
 
