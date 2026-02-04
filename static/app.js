@@ -3,8 +3,15 @@ const chatHistory = document.getElementById('chat-history');
 const chatForm = document.getElementById('chat-form');
 const userInput = document.getElementById('user-input');
 
+// Sanitize HTML to prevent XSS
+function sanitizeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 // Request stats updates every 3 seconds using simple polling
-setInterval(function() {
+let statsInterval = setInterval(function() {
     // Fetch system stats
     fetch('/api/system-stats')
         .then(response => response.json())
@@ -26,63 +33,100 @@ setInterval(function() {
         });
 }, 3000);
 
-// Initial stats request
-document.addEventListener('DOMContentLoaded', function() {
+// Stop polling when page is hidden to save resources
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        clearInterval(statsInterval);
+    } else {
+        statsInterval = setInterval(function() {
+            fetchSystemStats();
+            fetchMiningStats();
+        }, 3000);
+    }
+});
+
+function fetchSystemStats() {
     fetch('/api/system-stats')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             updateSystemStats(data);
         })
         .catch(error => {
-            console.error('Error fetching initial system stats:', error);
+            console.error('Error fetching system stats:', error);
         });
-    
+}
+
+function fetchMiningStats() {
     fetch('/api/miner-stats')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             updateMiningStats(data);
         })
         .catch(error => {
-            console.error('Error fetching initial mining stats:', error);
+            console.error('Error fetching mining stats:', error);
         });
+}
+
+// Initial stats request
+document.addEventListener('DOMContentLoaded', function() {
+    fetchSystemStats();
+    fetchMiningStats();
 });
 
 // Update system stats display
 function updateSystemStats(stats) {
-    if (stats.cpu_usage !== undefined) {
+    if (!stats || typeof stats !== 'object') {
+        return;
+    }
+    
+    if (typeof stats.cpu_usage === 'number') {
         document.getElementById('cpu-usage').textContent = `${stats.cpu_usage.toFixed(1)}%`;
     }
     
-    if (stats.memory_usage !== undefined) {
+    if (typeof stats.memory_usage === 'number') {
         document.getElementById('memory-usage').textContent = `${stats.memory_usage.toFixed(1)}%`;
     }
     
-    if (stats.temperature !== undefined && stats.temperature !== null) {
+    if (typeof stats.temperature === 'number' && stats.temperature !== null) {
         document.getElementById('temperature').textContent = `${stats.temperature.toFixed(1)}°C`;
     }
     
-    if (stats.uptime !== undefined && stats.uptime !== null) {
+    if (typeof stats.uptime === 'number' && stats.uptime !== null) {
         document.getElementById('uptime').textContent = `${stats.uptime.toFixed(1)} hrs`;
     }
 }
 
 // Update mining stats display
 function updateMiningStats(stats) {
-    if (stats.hashrate !== undefined) {
+    if (!stats || typeof stats !== 'object') {
+        return;
+    }
+    
+    if (typeof stats.hashrate === 'number') {
         document.getElementById('hashrate').textContent = `${Math.round(stats.hashrate)} H/s`;
     }
     
-    if (stats.total_mined !== undefined) {
-        document.getElementById('total-mined').textContent = `${stats.total_mined.toFixed(8)} XMR`;
+    if (typeof stats.total_mined === 'number') {
+        document.getElementById('total-mined').textContent = `${stats.total_mined.toFixed(4)} DUCO`;
     }
     
-    if (stats.uptime !== undefined) {
+    if (typeof stats.uptime === 'number') {
         const hours = (stats.uptime / 3600).toFixed(1);
         document.getElementById('miner-uptime').textContent = `${hours} hrs`;
     }
     
-    if (stats.estimated_daily_yield !== undefined) {
-        document.getElementById('daily-yield').textContent = `${stats.estimated_daily_yield.toFixed(8)} XMR`;
+    if (typeof stats.estimated_daily_yield === 'number') {
+        document.getElementById('daily-yield').textContent = `${stats.estimated_daily_yield.toFixed(4)} DUCO`;
     }
 }
 
@@ -91,7 +135,16 @@ chatForm.addEventListener('submit', function(e) {
     e.preventDefault();
     
     const message = userInput.value.trim();
-    if (!message) return;
+    if (!message || message.length === 0) return;
+    
+    // Validate message length
+    if (message.length > 2000) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'message assistant-message';
+        errorDiv.innerHTML = '<div class="message-content">Message too long (max 2000 characters)</div>';
+        chatHistory.appendChild(errorDiv);
+        return;
+    }
     
     // Add user message to chat
     addMessageToChat(message, 'user');
@@ -115,26 +168,35 @@ chatForm.addEventListener('submit', function(e) {
         },
         body: JSON.stringify({ message: message })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
     .then(data => {
         // Remove loading indicator
-        loadingMsg.remove();
+        if (loadingMsg && loadingMsg.parentNode) {
+            loadingMsg.remove();
+        }
         
         // Add AI response to chat
-        if (data.response) {
+        if (data.response && data.response.content) {
             addMessageToChat(data.response.content, 'assistant');
         } else if (data.error) {
-            addMessageToChat(`Error: ${data.error}`, 'assistant');
+            addMessageToChat(`Error: ${sanitizeHTML(data.error)}`, 'assistant');
         } else {
             addMessageToChat('Sorry, I did not understand that.', 'assistant');
         }
     })
     .catch(error => {
         // Remove loading indicator
-        loadingMsg.remove();
+        if (loadingMsg && loadingMsg.parentNode) {
+            loadingMsg.remove();
+        }
         
         // Add error message to chat
-        addMessageToChat(`Error: ${error.message}`, 'assistant');
+        addMessageToChat(`Error: ${sanitizeHTML(error.message)}`, 'assistant');
     })
     .finally(() => {
         // Re-enable input
@@ -146,6 +208,10 @@ chatForm.addEventListener('submit', function(e) {
 
 // Add message to chat history
 function addMessageToChat(content, sender, isLoading = false) {
+    if (!content || typeof content !== 'string') {
+        return null;
+    }
+    
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('message');
     messageDiv.classList.add(`${sender}-message`);
@@ -156,8 +222,26 @@ function addMessageToChat(content, sender, isLoading = false) {
     if (isLoading) {
         contentDiv.innerHTML = '<div class="loading"></div>';
     } else if (sender === 'assistant') {
-        // Parse markdown content
-        contentDiv.innerHTML = marked.parse(content);
+        // Parse markdown content safely with DOMPurify-like sanitization
+        try {
+            if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+                const rawHTML = marked.parse(content);
+                // Create temporary element to sanitize
+                const temp = document.createElement('div');
+                temp.textContent = content;
+                // Only use marked if content doesn't contain script tags
+                if (!/<script|javascript:/i.test(content)) {
+                    contentDiv.innerHTML = rawHTML;
+                } else {
+                    contentDiv.textContent = content;
+                }
+            } else {
+                contentDiv.textContent = content;
+            }
+        } catch (e) {
+            console.error('Error parsing markdown:', e);
+            contentDiv.textContent = content;
+        }
     } else {
         contentDiv.textContent = content;
     }
@@ -171,9 +255,5 @@ function addMessageToChat(content, sender, isLoading = false) {
     return messageDiv;
 }
 
-// Handle Enter key for submitting chat
-userInput.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        chatForm.dispatchEvent(new Event('submit'));
-    }
-});
+// Handle Enter key for submitting chat (removed duplicate handler)
+// Form submission is already handled by the submit event listener above

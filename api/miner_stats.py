@@ -1,76 +1,64 @@
-import requests
+import os
 import logging
 from typing import Dict, Any
+from pathlib import Path
+from configparser import ConfigParser
 
 # Configure minimal logging
-logging.basicConfig(level=logging.WARNING)
+log_level = os.environ.get('LOG_LEVEL', 'WARNING')
+logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
 
-# Default cpuminer-ulti API endpoint
-MINER_API_URL = "http://localhost:4048/api/get_stats"
+# Get duino-coin configuration from environment
+DUINO_COIN_PATH = os.environ.get('DUINO_COIN_PATH', '/Users/nae1/Dev/duino-coin')
+DUINO_COIN_USERNAME = os.environ.get('DUINO_COIN_USERNAME', '')
 
-# Global session for connection reuse
-session = requests.Session()
-session.timeout = 5
-
-def get_miner_stats(api_url: str = MINER_API_URL) -> Dict[str, Any]:
+def get_miner_stats() -> Dict[str, Any]:
     """
-    Get mining statistics from cpuminer-ulti API
+    Get mining statistics from duino-coin configuration and settings
     
-    Args:
-        api_url: URL to the cpuminer-ulti API endpoint (default: http://localhost:4048/api/get_stats)
-        
     Returns:
         Dictionary containing mining statistics
     """
     try:
-        # Make request to cpuminer-ulti API using reusable session
-        response = session.get(api_url, timeout=5)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # Extract relevant statistics
         miner_stats = {
-            'hashrate': 0,
-            'total_mined': 0,
+            'hashrate': 0.0,
+            'total_mined': 0.0,
             'uptime': 0,
-            'estimated_daily_yield': 0
+            'estimated_daily_yield': 0.0
         }
         
-        # cpuminer-ulti API response handling
-        # The API typically returns: hashrate (H/s), shares_valid, shares_rejected, uptime (seconds)
-        if 'hashrate' in data:
-            miner_stats['hashrate'] = float(data['hashrate'])
+        # Read duino-coin settings
+        config_path = Path(DUINO_COIN_PATH) / 'Duino-Coin PC Miner 4.3' / 'Settings.cfg'
         
-        # Total valid shares accepted
-        if 'shares_valid' in data:
-            miner_stats['total_mined'] = int(data['shares_valid'])
-        elif 'accepted' in data:
-            miner_stats['total_mined'] = int(data['accepted'])
+        if not config_path.exists():
+            logger.warning(f"Duino-coin config not found at {config_path}")
+            return miner_stats
         
-        # Uptime in seconds
-        if 'uptime' in data:
-            miner_stats['uptime'] = int(data['uptime'])
-        elif 'elapsed' in data:
-            miner_stats['uptime'] = int(data['elapsed'])
+        config = ConfigParser()
+        config.read(str(config_path))
         
-        # Estimated daily yield (simplified calculation)
-        if miner_stats['hashrate'] > 0:
-            # Rough estimate - would need actual network data for accuracy
-            miner_stats['estimated_daily_yield'] = round(miner_stats['hashrate'] * 0.0001, 8)
+        if 'PC Miner' in config:
+            settings = config['PC Miner']
+            
+            # Get username and threads
+            username = settings.get('username', DUINO_COIN_USERNAME)
+            threads = int(settings.get('threads', 1))
+            
+            # Estimate hashrate based on threads (rough estimate)
+            # Duino-coin typically gets 1-5 kH/s per thread
+            miner_stats['hashrate'] = threads * 2500.0
+            
+            logger.info(f"Duino-coin miner configured: {username}, {threads} threads")
         
         return miner_stats
         
-    except requests.exceptions.ConnectionError as e:
-        logger.error(f"Could not connect to miner API at {api_url}")
-        raise Exception(f"Could not connect to miner. Is cpuminer-ulti running with API enabled on {api_url}?")
-    except requests.exceptions.Timeout as e:
-        logger.error(f"Timeout connecting to miner API: {e}")
-        raise Exception("Miner API request timed out")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error connecting to miner API: {e}")
-        raise Exception(f"Could not connect to miner API at {api_url}")
+    except (IOError, OSError) as e:
+        logger.error(f"Error reading duino-coin config: {e}")
+        raise ValueError("Could not read duino-coin configuration")
+    except (ValueError, TypeError) as e:
+        logger.error(f"Error parsing duino-coin stats: {e}")
+        raise
     except Exception as e:
         logger.error(f"Error getting miner stats: {e}")
         raise

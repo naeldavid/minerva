@@ -7,31 +7,38 @@ except ImportError:
 import subprocess
 import time
 import logging
+import os
 
+log_level = os.environ.get('LOG_LEVEL', 'WARNING')
+logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
-
-# Reduce logging level to minimize I/O
-logging.getLogger().setLevel(logging.WARNING)
 
 def get_cpu_temperature():
     """Get CPU temperature using vcgencmd"""
     try:
         # Try vcgencmd first (Raspberry Pi specific)
-        result = subprocess.run(['vcgencmd', 'measure_temp'], 
-                              capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            ['vcgencmd', 'measure_temp'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False
+        )
         if result.returncode == 0:
             # Parse output like "temp=45.2'C"
             temp_str = result.stdout.strip()
-            temp_value = temp_str.split('=')[1].replace("'C", "")
-            return float(temp_value)
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, ValueError):
+            if '=' in temp_str:
+                temp_value = temp_str.split('=')[1].replace("'C", "").replace("°C", "")
+                return float(temp_value)
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, ValueError, IndexError) as e:
+        logger.debug(f"vcgencmd failed: {e}")
         # Fallback to thermal zone if vcgencmd is not available
         try:
             with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
                 temp = int(f.read().strip()) / 1000.0
                 return temp
-        except:
-            logger.warning("Could not get CPU temperature")
+        except (IOError, OSError, ValueError) as e:
+            logger.warning(f"Could not get CPU temperature: {e}")
             return None
     return None
 
@@ -41,12 +48,15 @@ def get_uptime():
         with open('/proc/uptime', 'r') as f:
             uptime_seconds = float(f.readline().split()[0])
             return uptime_seconds / 3600  # Convert to hours
-    except:
-        logger.warning("Could not get system uptime")
+    except (IOError, OSError, ValueError, IndexError) as e:
+        logger.warning(f"Could not get system uptime: {e}")
         return None
 
 def get_network_status():
     """Get basic network status"""
+    if not PSUTIL_AVAILABLE:
+        return {}
+    
     try:
         # Get network interfaces
         net_io = psutil.net_io_counters()
@@ -54,8 +64,8 @@ def get_network_status():
             'bytes_sent': net_io.bytes_sent,
             'bytes_recv': net_io.bytes_recv
         }
-    except:
-        logger.warning("Could not get network status")
+    except (AttributeError, OSError) as e:
+        logger.warning(f"Could not get network status: {e}")
         return {}
 
 def get_system_stats():
@@ -106,8 +116,11 @@ def get_fallback_cpu_usage():
         cpu_times = [int(x) for x in line.split()[1:]]
         idle_time = cpu_times[3]
         total_time = sum(cpu_times)
+        if total_time == 0:
+            return 0.0
         return round((1.0 - idle_time / total_time) * 100, 1)
-    except:
+    except (IOError, OSError, ValueError, IndexError, ZeroDivisionError) as e:
+        logger.warning(f"Could not get CPU usage: {e}")
         return 0.0
 
 def get_fallback_memory_usage():
@@ -117,9 +130,12 @@ def get_fallback_memory_usage():
             lines = f.readlines()
         mem_total = int(lines[0].split()[1])
         mem_free = int(lines[1].split()[1])
+        if mem_total == 0:
+            return 0.0
         mem_used = mem_total - mem_free
         return round((mem_used / mem_total) * 100, 1)
-    except:
+    except (IOError, OSError, ValueError, IndexError, ZeroDivisionError) as e:
+        logger.warning(f"Could not get memory usage: {e}")
         return 0.0
 
 if __name__ == "__main__":

@@ -1,18 +1,20 @@
 #!/bin/bash
-
-# Lightweight Raspberry Pi Zero Startup Script
+set -e
 
 # Set working directory
-cd /home/pi/rpi_server/server
+cd /home/pi/rpi_server/server || exit 1
 
-# Load environment variables
+# Load environment variables safely
 if [ -f ../config/settings.env ]; then
-    export $(cat ../config/settings.env | xargs)
+    set -a
+    # shellcheck source=/dev/null
+    . ../config/settings.env
+    set +a
 fi
 
 # Function to check if a process is running
 is_running() {
-    pgrep -f "$1" > /dev/null
+    pgrep -f "$1" > /dev/null 2>&1
     return $?
 }
 
@@ -27,23 +29,8 @@ start_server() {
     fi
 }
 
-# Function to start the mining service
-start_mining() {
-    echo "Starting mining service..."
-    if is_running "cpuminer-ulti"; then
-        echo "Mining already running"
-    else
-        # Start cpuminer-ulti with conservative settings for Pi Zero
-        # Enable API on localhost:4048 for stats collection
-        nohup cpuminer-ulti --cpu-threads=1 --api-bind=127.0.0.1:4048 > /dev/null 2>&1 &
-        echo "Mining started"
-    fi
-}
-
 # Start services
 start_server
-start_mining
 
 echo "Services started"
-
 exit 0

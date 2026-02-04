@@ -2,10 +2,12 @@ import os
 import requests
 import json
 import logging
+import html
 from typing import Dict, Any
 
 # Configure minimal logging
-logging.basicConfig(level=logging.WARNING)
+log_level = os.environ.get('LOG_LEVEL', 'WARNING')
+logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
 
 # Get API configuration from environment variables
@@ -32,11 +34,24 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
     Returns:
         Dictionary containing the AI response formatted for display
     """
-    global last_request_time
-    
     # Validate configuration
     if not AI_API_URL:
-        raise Exception("AI_API_URL environment variable not set")
+        raise ValueError("AI_API_URL environment variable not set")
+    
+    # Validate and sanitize input
+    if not prompt or not isinstance(prompt, str):
+        raise ValueError("Invalid prompt")
+    
+    prompt = prompt.strip()
+    if len(prompt) > 2000:
+        raise ValueError("Prompt too long (max 2000 characters)")
+    
+    # Sanitize prompt to prevent injection
+    prompt = html.escape(prompt)
+    
+    # Validate max_tokens
+    if not isinstance(max_tokens, int) or max_tokens < 1 or max_tokens > 2000:
+        max_tokens = 500
     
     # Prepare headers
     headers = {
@@ -56,11 +71,12 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
     }
     
     try:
-        # Make request to AI API using reusable session
+        # Make request to AI API using reusable session with timeout
         response = session.post(
             AI_API_URL,
             headers=headers,
-            json=payload
+            json=payload,
+            timeout=30
         )
         
         # Raise exception for bad status codes
@@ -88,13 +104,13 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         
     except requests.exceptions.Timeout:
         logger.error("AI API request timed out")
-        raise Exception("AI service timeout - please try again")
+        raise ValueError("AI service timeout - please try again")
     except requests.exceptions.RequestException as e:
         logger.error(f"Error connecting to AI API: {e}")
-        raise Exception(f"Could not connect to AI service: {str(e)}")
+        raise ValueError(f"Could not connect to AI service")
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON response from AI API: {e}")
-        raise Exception("Invalid response from AI service")
+        raise ValueError("Invalid response from AI service")
     except Exception as e:
         logger.error(f"Error processing AI request: {e}")
         raise
@@ -109,11 +125,15 @@ def format_response(text: str) -> Dict[str, Any]:
     Returns:
         Dictionary with structured content
     """
-    # For now, we'll return the text as-is
-    # In future, we could parse markdown or other formatting
+    if not isinstance(text, str):
+        text = str(text)
+    
+    # Sanitize output
+    text = html.unescape(text)
+    
     return {
         "content": text,
-        "format": "text"  # Could be "markdown", "html", etc.
+        "format": "text"
     }
 
 # Example usage function

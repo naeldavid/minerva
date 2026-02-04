@@ -3,7 +3,7 @@
 **Minerva** (Miner + EVA) is a lightweight web-based control panel for Raspberry Pi Zero that combines cryptocurrency mining management with an integrated AI assistant. It provides:
 - AI study assistant (EVA) via external free AI API
 - Real-time system performance monitoring
-- Live crypto mining statistics with cpuminer-ulti integration
+- Live crypto mining statistics with Duino-Coin integration
 - Continuous operation with minimal resource usage on low-power devices
 
 ## Features
@@ -21,10 +21,10 @@
 - Network status
 
 ### Mining Statistics
-- Total XMR mined
-- Current hashrate
-- Miner uptime
-- Estimated daily yield
+- Total DUCO mined
+- Current hashrate estimate
+- Miner configuration
+- Thread count
 
 ## Project Structure
 
@@ -105,37 +105,30 @@ Edit `config/settings.env` to configure:
 
 - **Flask settings** - Port, debug mode, host
 - **AI API settings** - API URL, authentication key, model configuration
-- **Miner API settings** - cpuminer-ulti API endpoint configuration
+- **Duino-Coin settings** - Path to duino-coin directory, username
 - **Logging preferences** - Log level and output configuration
-- **Mining thresholds** - CPU usage limits for throttling
 
-### Cpuminer-ulti Integration
-
-Minerva is designed to work with **cpuminer-ulti**, an optimized CPU miner for Monero. The miner provides:
-- Statistics API for real-time monitoring
-- Lightweight process suitable for Raspberry Pi
-- Support for GPU acceleration (if available)
-
-To enable the API for stats collection, start cpuminer-ulti with the `--api-bind` parameter:
+**IMPORTANT SECURITY:** Generate a strong secret key before deployment:
 ```bash
-cpuminer-ulti --cpu-threads=1 --api-bind=127.0.0.1:4048
+python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-**To enable cpuminer-ulti API:**
-```bash
-# Basic setup with API enabled on localhost:4048
-cpuminer-ulti --cpu-threads=1 --api-bind=127.0.0.1:4048
+### Duino-Coin Integration
 
-# With pool configuration
-cpuminer-ulti --cpu-threads=1 -o stratum+tcp://pool.moneroocean.stream:10128 \
-  -u YOUR_MONERO_ADDRESS --api-bind=127.0.0.1:4048
-```
+Minerva is designed to work with **Duino-Coin**, a cryptocurrency that can be mined on low-power devices like Raspberry Pi.
 
-**Test API compatibility:**
+**Setup:**
+1. Install Duino-Coin miner in `/Dev/duino-coin` (or configure path in settings.env)
+2. Configure your Duino-Coin username in `config/settings.env`
+3. Start the Duino-Coin miner separately
+4. Minerva will read mining statistics from the Duino-Coin configuration
+
+**Configuration:**
 ```bash
-python3 test_miner_compatibility.py
+# In config/settings.env
+DUINO_COIN_PATH=/Users/nae1/Dev/duino-coin
+DUINO_COIN_USERNAME=your-username
 ```
-Tests connection to cpuminer-ulti API and parses mining statistics.
 
 ## Usage
 
@@ -180,31 +173,9 @@ sudo systemctl restart rpi-dashboard.service
 
 ## Utilities
 
-The following utility scripts are included to help with deployment and testing:
+The following utility scripts are included:
 
-- **`verify_optimization.py`** - Verify performance optimizations and resource usage
-- **`test_miner_compatibility.py`** - Test cpuminer-ulti API compatibility
-- **`miner_quick_ref.py`** - Quick reference for cpuminer-ulti command-line configuration
-- **`DEPLOYMENT_CHECKLIST.py`** - Automated deployment verification checklist
 - **`monitor_mining.py`** - Monitor mining with automatic CPU throttling
-
-## Testing & Verification
-
-**Test miner API compatibility:**
-```bash
-python3 test_miner_compatibility.py
-```
-Tests connection to cpuminer-ulti API and validates response parsing.
-
-**Verify performance optimizations:**
-```bash
-python3 verify_optimization.py
-```
-
-**Run deployment checklist:**
-```bash
-python3 DEPLOYMENT_CHECKLIST.py
-```
 
 ## Performance Optimizations
 
