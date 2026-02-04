@@ -7,7 +7,7 @@
 body {
     font-family: monospace;
     background: #000;
-    color: #0f0;
+    color: #fff;
     line-height: 1.4;
 }
 
@@ -26,7 +26,7 @@ body {
 
 .chat-section {
     background: #111;
-    border: 1px solid #333;
+    border: 1px solid #fff;
     display: flex;
     flex-direction: column;
     height: calc(100vh - 20px);
@@ -49,14 +49,14 @@ body {
 .user-message {
     align-self: flex-end;
     background: #222;
-    color: #0f0;
+    color: #fff;
     max-width: 80%;
 }
 
 .assistant-message {
     align-self: flex-start;
     background: #1a1a1a;
-    color: #0f0;
+    color: #fff;
     max-width: 80%;
 }
 
@@ -87,28 +87,28 @@ body {
 .chat-input-area {
     display: flex;
     padding: 10px;
-    border-top: 1px solid #333;
+    border-top: 1px solid #fff;
     gap: 10px;
 }
 
 .chat-input-area input {
     flex: 1;
     padding: 8px;
-    border: 1px solid #333;
+    border: 1px solid #fff;
     border-radius: 4px;
     background: #000;
-    color: #0f0;
+    color: #fff;
     font-family: monospace;
     outline: none;
 }
 
 .chat-input-area input:focus {
-    border-color: #0f0;
+    border-color: #fff;
 }
 
 .chat-input-area button {
     padding: 8px 16px;
-    background: #0f0;
+    background: #fff;
     color: #000;
     border: none;
     border-radius: 4px;
@@ -118,7 +118,7 @@ body {
 }
 
 .chat-input-area button:hover {
-    background: #0c0;
+    background: #ccc;
 }
 
 .chat-input-area button:disabled {
@@ -134,16 +134,16 @@ body {
 
 .widget {
     background: #111;
-    border: 1px solid #333;
+    border: 1px solid #fff;
     border-radius: 4px;
     padding: 10px;
 }
 
 .widget h2 {
     margin-bottom: 10px;
-    color: #0f0;
+    color: #fff;
     font-size: 14px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #fff;
     padding-bottom: 5px;
 }
 
@@ -168,7 +168,7 @@ body {
 .stat-value {
     font-size: 14px;
     font-weight: bold;
-    color: #0f0;
+    color: #fff;
 }
 
 .loading {
@@ -176,7 +176,7 @@ body {
     width: 12px;
     height: 12px;
     border: 2px solid #333;
-    border-top: 2px solid #0f0;
+    border-top: 2px solid #fff;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }

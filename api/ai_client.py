@@ -62,12 +62,23 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
     if AI_API_KEY:
         headers['Authorization'] = f'Bearer {AI_API_KEY}'
     
-    # Prepare the payload for Ollama API
-    payload = {
-        "model": AI_MODEL,
-        "prompt": prompt,
-        "stream": False
-    }
+    # Detect API type and prepare payload
+    if 'huggingface.co' in AI_API_URL:
+        # Hugging Face Inference API format
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": max_tokens,
+                "return_full_text": False
+            }
+        }
+    else:
+        # Ollama/OpenAI-compatible format
+        payload = {
+            "model": AI_MODEL,
+            "prompt": prompt,
+            "stream": False
+        }
     
     try:
         # Make request to AI API using reusable session with timeout
@@ -84,10 +95,18 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         # Parse response
         data = response.json()
         
-        # Parse Ollama response format
-        if 'response' in data:
+        # Parse response based on API type
+        if 'huggingface.co' in AI_API_URL:
+            # Hugging Face returns array of results
+            if isinstance(data, list) and len(data) > 0:
+                response_text = data[0].get('generated_text', str(data))
+            else:
+                response_text = str(data)
+        elif 'response' in data:
+            # Ollama format
             response_text = data['response']
         elif 'choices' in data and len(data['choices']) > 0:
+            # OpenAI format
             if 'message' in data['choices'][0]:
                 response_text = data['choices'][0]['message']['content']
             elif 'text' in data['choices'][0]:
