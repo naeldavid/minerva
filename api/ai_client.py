@@ -1,6 +1,4 @@
 import os
-import requests
-import json
 import logging
 import html
 from typing import Dict, Any
@@ -11,21 +9,24 @@ logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
 
 # Get API configuration from environment variables
-AI_API_URL = os.environ.get('AI_API_URL', 'https://router.huggingface.co/models/nae1/eva')
 AI_API_KEY = os.environ.get('AI_API_KEY', '')
-AI_MODEL = os.environ.get('AI_MODEL', 'nae1/eva')  # Default model
+AI_MODEL = os.environ.get('AI_MODEL', 'nae1/eva')  # Default to your model
 
-# Global session for connection reuse
-session = requests.Session()
-session.timeout = 120  # Increased for model loading
-
-# Rate limiting variables
-last_request_time = 0
-min_request_interval = 1.0  # Minimum seconds between requests
+# Try to import InferenceClient for better model support
+try:
+    from huggingface_hub import InferenceClient
+    HF_CLIENT_AVAILABLE = True
+except ImportError:
+    HF_CLIENT_AVAILABLE = False
+    logger.warning("huggingface_hub not installed; falling back to requests")
+    import requests
+    session = requests.Session()
+    session.timeout = 120
 
 def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
     """
-    Process a request to the AI API and return structured response
+    Process a request to the AI API and return structured response.
+    Uses HuggingFace InferenceClient for automatic model routing and format handling.
     
     Args:
         prompt: User's input prompt
@@ -35,8 +36,11 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         Dictionary containing the AI response formatted for display
     """
     # Validate configuration
-    if not AI_API_URL:
-        raise ValueError("AI_API_URL environment variable not set")
+    if not AI_API_KEY:
+        raise ValueError("AI_API_KEY not set. Get one from https://huggingface.co/settings/tokens")
+    
+    if not AI_MODEL:
+        raise ValueError("AI_MODEL environment variable not set")
     
     # Validate and sanitize input
     if not prompt or not isinstance(prompt, str):
@@ -53,123 +57,78 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
     if not isinstance(max_tokens, int) or max_tokens < 1 or max_tokens > 2000:
         max_tokens = 500
     
-    # Prepare headers
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    
-    # Add API key if provided
-    if AI_API_KEY:
-        headers['Authorization'] = f'Bearer {AI_API_KEY}'
-    
-    # Detect API type and prepare payload
-    if 'huggingface.co' in AI_API_URL:
-        # Hugging Face Inference API format - try multiple formats
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": max_tokens,
-                "temperature": 0.7,
-                "return_full_text": False,
-                "do_sample": True
-            },
-            "options": {
-                "wait_for_model": True,
-                "use_cache": False
-            }
-        }
-    else:
-        # Generic OpenAI-compatible format
-        payload = {
-            "model": AI_MODEL,
-            "prompt": prompt,
-            "max_tokens": max_tokens
-        }
-    
     try:
-        # Make request to AI API using reusable session with timeout
-        response = session.post(
-            AI_API_URL,
-            headers=headers,
-            json=payload,
-            timeout=120  # Increased timeout for model loading
-        )
-        
-        # If HF returns 410 for deprecated endpoint, retry with router
-        if response.status_code == 410 and 'huggingface.co' in AI_API_URL and 'router.huggingface.co' not in AI_API_URL:
-            logger.warning("HF API returned 410; retrying with router.huggingface.co")
-            AI_API_URL = 'https://router.huggingface.co/models/' + AI_MODEL
-            response = session.post(AI_API_URL, headers=headers, json=payload, timeout=120)
-
-        # Raise exception for bad status codes
-        try:
-            response.raise_for_status()
-        except requests.exceptions.HTTPError:
-            # Log body but avoid returning raw HTML from HF to callers
-            content_type = response.headers.get('Content-Type', '')
-            body = response.text[:2000]
-            logger.error(f"HF API HTTP {response.status_code}: {body}")
-            if 'text/html' in content_type:
-                raise ValueError("AI service returned unexpected HTML response; check AI_API_URL and API key.")
-            response.raise_for_status()
-
-        # Parse response
-        # Protect against non-JSON responses
-        content_type = response.headers.get('Content-Type', '')
-        if 'application/json' not in content_type:
-            # attempt to parse JSON anyways, but fail gracefully
+        if HF_CLIENT_AVAILABLE:
+            # Use InferenceClient - handles routing and format automatically
+            client = InferenceClient(api_key=AI_API_KEY)
+            
             try:
-                data = response.json()
-            except Exception:
-                logger.error("AI service returned non-JSON response")
-                raise ValueError("Invalid response from AI service")
-        else:
-            data = response.json()
-        
-        # Parse response based on API type
-        if 'huggingface.co' in AI_API_URL:
-            # Hugging Face returns array of results or error dict
-            if isinstance(data, dict) and 'error' in data:
-                error_msg = data.get('error', 'Unknown error')
-                logger.error(f"HF API error: {error_msg}")
-                raise ValueError(f"Model error: {error_msg}")
-            elif isinstance(data, list) and len(data) > 0:
-                if isinstance(data[0], dict):
-                    response_text = data[0].get('generated_text', data[0].get('text', str(data)))
+                # Try chat completion first (preferred for conversational models)
+                response = client.chat_completion(
+                    model=AI_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=max_tokens,
+                    temperature=0.7
+                )
+                
+                if response and hasattr(response, 'choices') and len(response.choices) > 0:
+                    response_text = response.choices[0].message.content
                 else:
-                    response_text = str(data[0])
+                    response_text = str(response)
+                
+            except Exception as chat_error:
+                # Fall back to text generation if chat fails
+                logger.debug(f"Chat completion failed, trying text generation: {chat_error}")
+                response = client.text_generation(
+                    model=AI_MODEL,
+                    prompt=prompt,
+                    max_new_tokens=max_tokens,
+                    temperature=0.7,
+                    do_sample=True
+                )
+                response_text = response if isinstance(response, str) else str(response)
+        
+        else:
+            # Fallback: use requests with the old API format
+            logger.warning("Using fallback requests method (install huggingface_hub for better support)")
+            import requests
+            import json
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {AI_API_KEY}'
+            }
+            
+            # Try old API format
+            api_url = f"https://api-inference.huggingface.co/models/{AI_MODEL}"
+            payload = {
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": max_tokens,
+                    "temperature": 0.7,
+                    "do_sample": True
+                }
+            }
+            
+            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            response.raise_for_status()
+            data = response.json()
+            
+            if isinstance(data, list) and len(data) > 0:
+                response_text = data[0].get('generated_text', str(data))
             elif isinstance(data, dict) and 'generated_text' in data:
                 response_text = data['generated_text']
             else:
                 response_text = str(data)
-        elif 'choices' in data and len(data['choices']) > 0:
-            # OpenAI-compatible format
-            if 'message' in data['choices'][0]:
-                response_text = data['choices'][0]['message']['content']
-            elif 'text' in data['choices'][0]:
-                response_text = data['choices'][0]['text']
-            else:
-                response_text = str(data)
-        else:
-            response_text = str(data)
         
-        # Format response for display
         return format_response(response_text)
         
-    except requests.exceptions.Timeout:
-        logger.error(f"AI service timeout")
-        raise ValueError("AI service timeout - please try again")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"AI service connection error: {e}")
-        logger.error(f"Response status: {getattr(e.response, 'status_code', 'N/A')}")
-        logger.error(f"Response body: {getattr(e.response, 'text', 'N/A')}")
-        raise ValueError(f"Could not connect to AI service: {str(e)}")
-    except json.JSONDecodeError as e:
-        logger.error(f"AI service invalid JSON: {e}")
-        raise ValueError("Invalid response from AI service")
+    except ValueError as ve:
+        logger.error(f"Validation error: {ve}")
+        raise
     except Exception as e:
         logger.error(f"Error processing AI request: {e}")
-        raise
+        raise ValueError(f"AI service error: {str(e)}")
 
 def format_response(text: str) -> Dict[str, Any]:
     """

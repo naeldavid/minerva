@@ -52,8 +52,7 @@ Open the file and set at minimum:
 # Flask
 SECRET_KEY=generate-with-python3-c-import-secrets-print-secrets-token-hex-32
 
-# Hugging Face (default uses router endpoint)
-AI_API_URL=https://router.huggingface.co/models/nae1/eva
+# Hugging Face (uses InferenceClient for automatic routing)
 AI_API_KEY=hf_your_token_here
 AI_MODEL=nae1/eva
 
@@ -63,7 +62,7 @@ LOG_LEVEL=WARNING
 
 Notes:
 - Obtain `AI_API_KEY` from https://huggingface.co/settings/tokens
-- `AI_API_URL` defaults to the router endpoint (`router.huggingface.co`) which is recommended by Hugging Face.
+- The app uses `huggingface_hub.InferenceClient` which automatically routes to the best available provider for your model.
 
 3. Run the app (recommended for Pi Zero W):
 
@@ -82,10 +81,14 @@ Optional: create a systemd service using `services/rpi-dashboard.service` to run
 
 ## Configuration Reference
 
-- `AI_API_URL` — Full URL to the Hugging Face inference endpoint. Default: `https://router.huggingface.co/models/nae1/eva`
-- `AI_API_KEY` — Your Hugging Face token (required for private models or higher rate limits)
-- `AI_MODEL` — Model identifier (e.g., `nae1/eva`)
+- `AI_API_KEY` — Your Hugging Face token (required for all models). Get one from: https://huggingface.co/settings/tokens
+- `AI_MODEL` — Model identifier (e.g., `nae1/eva`, `meta-llama/Llama-2-7b-hf`, etc.). Any model on Hugging Face can be used.
 - `LOG_LEVEL` — Logging verbosity; use `WARNING` or `ERROR` on Pi Zero
+
+**How it works:**
+- The app uses `huggingface_hub.InferenceClient` which automatically routes your request to the best provider and handles format conversion.
+- First request may take 20-60 seconds while the model loads; subsequent requests are faster.
+- If `huggingface_hub` is not installed, falls back to the standard HF inference API.
 
 Security note: Keep `AI_API_KEY` secret. This project is intended for local networks; if exposing publicly, use a reverse proxy with authentication.
 
