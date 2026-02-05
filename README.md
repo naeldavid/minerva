@@ -1,17 +1,18 @@
 # Minerva
 
 **Minerva** (Miner + EVA) is a lightweight web-based control panel for Raspberry Pi Zero that combines cryptocurrency mining management with an integrated AI assistant. It provides:
-- AI study assistant (EVA) via external free AI API
+- AI study assistant (EVA) via Hugging Face Inference API (cloud-based)
 - Real-time system performance monitoring
 - Live crypto mining statistics with Duino-Coin integration
 - Continuous operation with minimal resource usage on low-power devices
 
 ## Features
 
-### Study Assistant
-- Web-based chat interface with AI
-- Structured response formatting (headings, bullet points, code blocks)
-- Multi-message history support
+### Study Assistant (EVA)
+- Web-based chat interface powered by custom AI model
+- Cloud-based inference via Hugging Face (no local AI processing)
+- Minimal black terminal-style UI with white accents
+- Multi-message conversation history
 
 ### System Monitoring
 - CPU usage percentage
@@ -78,9 +79,11 @@ nano config/settings.env
 # Generate a strong secret key
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 
-# Configure AI API (Ollama)
-AI_API_URL=http://localhost:11434/api/generate
-AI_MODEL=llama2
+# Configure AI API (Hugging Face)
+# Get your token from: https://huggingface.co/settings/tokens
+AI_API_URL=https://api-inference.huggingface.co/models/nae1/eva
+AI_API_KEY=hf_your_token_here
+AI_MODEL=nae1/eva
 
 # Configure Duino-Coin
 DUINO_COIN_PATH=/home/pi/duino-coin
@@ -111,10 +114,11 @@ SECRET_KEY=your-secret-key-here  # Generate with: python3 -c "import secrets; pr
 FLASK_ENV=production
 FLASK_DEBUG=False
 
-# AI API Settings (Ollama)
-AI_API_URL=http://localhost:11434/api/generate
-AI_API_KEY=
-AI_MODEL=llama2
+# AI API Settings (Hugging Face)
+# Get your token from: https://huggingface.co/settings/tokens
+AI_API_URL=https://api-inference.huggingface.co/models/nae1/eva
+AI_API_KEY=hf_your_token_here
+AI_MODEL=nae1/eva
 
 # Miner Settings (Duino-Coin)
 DUINO_COIN_PATH=/home/pi/duino-coin
@@ -124,7 +128,33 @@ DUINO_COIN_USERNAME=your-username
 LOG_LEVEL=WARNING
 ```
 
-### Duino-Coin Integration
+### Hugging Face AI Integration
+
+Minerva uses Hugging Face Inference API for cloud-based AI processing. This means:
+- **No local AI processing** - All inference happens on Hugging Face servers
+- **Minimal resource usage** - Perfect for Raspberry Pi Zero W
+- **First request delay** - Model loading takes 20-60 seconds on first call
+- **Fast subsequent requests** - Model stays loaded for ~15 minutes
+
+**Setup:**
+```bash
+# 1. Get Hugging Face API token
+# Visit: https://huggingface.co/settings/tokens
+# Create a new token (read access is sufficient)
+
+# 2. Update Minerva config
+nano ~/minerva/config/settings.env
+# Set: AI_API_URL=https://api-inference.huggingface.co/models/nae1/eva
+# Set: AI_API_KEY=hf_your_token_here
+# Set: AI_MODEL=nae1/eva
+
+# 3. Restart dashboard
+python3 ~/minerva/app.py
+```
+
+**Note:** You can use any Hugging Face model by changing the AI_API_URL and AI_MODEL values.
+
+### Duino-Coin Mining Integration
 
 Minerva reads mining statistics from Duino-Coin configuration files.
 
@@ -151,9 +181,10 @@ python3 ~/minerva/app.py             # Start dashboard
 **Access:** `http://<raspberry-pi-ip>:5000` (accessible on local network)
 
 **Features:**
-- **AI Chat** - Ask EVA questions via Ollama
+- **AI Chat** - Ask EVA questions via Hugging Face cloud API
 - **System Stats** - Real-time CPU, RAM, temperature, uptime
 - **Mining Stats** - Hashrate, DUCO mined, thread count
+- **Minimal UI** - Black terminal theme with white text
 
 ## Management
 
@@ -190,16 +221,18 @@ sudo systemctl restart rpi-dashboard.service
 ## Performance
 
 **Optimized for Raspberry Pi Zero W:**
-- **Memory:** 20-30MB (dashboard) + 30-50MB (Duino-Coin) = ~55-75MB total
-- **CPU:** <5% idle, 50-70% when mining
+- **Memory:** ~20-30MB (dashboard only, AI runs on cloud)
+- **CPU:** <5% idle, 50-70% when mining (no AI processing locally)
 - **Codebase:** ~25KB Python
 - **Polling:** 3-second updates (stops when page hidden)
 - **No WebSockets:** Simple HTTP polling
 - **Minimal logging:** WARNING level only
+- **Cloud AI:** All AI inference on Hugging Face servers
 
 **Expected performance:**
 - Dashboard load: 2-3 seconds
 - Update latency: <500ms
+- AI response: 20-60s first call, 2-5s subsequent calls
 - Duino-Coin hashrate: 1-3 kH/s (1 thread)
 
 ## Contributing

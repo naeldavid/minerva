@@ -73,11 +73,11 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
             }
         }
     else:
-        # Ollama/OpenAI-compatible format
+        # Generic OpenAI-compatible format
         payload = {
             "model": AI_MODEL,
             "prompt": prompt,
-            "stream": False
+            "max_tokens": max_tokens
         }
     
     try:
@@ -102,11 +102,8 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
                 response_text = data[0].get('generated_text', str(data))
             else:
                 response_text = str(data)
-        elif 'response' in data:
-            # Ollama format
-            response_text = data['response']
         elif 'choices' in data and len(data['choices']) > 0:
-            # OpenAI format
+            # OpenAI-compatible format
             if 'message' in data['choices'][0]:
                 response_text = data['choices'][0]['message']['content']
             elif 'text' in data['choices'][0]:
