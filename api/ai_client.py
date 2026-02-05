@@ -11,9 +11,9 @@ logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
 
 # Get API configuration from environment variables
-AI_API_URL = os.environ.get('AI_API_URL', '')
+AI_API_URL = os.environ.get('AI_API_URL', 'https://api-inference.huggingface.co/models/nae1/eva')
 AI_API_KEY = os.environ.get('AI_API_KEY', '')
-AI_MODEL = os.environ.get('AI_MODEL', 'llama3')  # Default model
+AI_MODEL = os.environ.get('AI_MODEL', 'nae1/eva')  # Default model
 
 # Global session for connection reuse
 session = requests.Session()

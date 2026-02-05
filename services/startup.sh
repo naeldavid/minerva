@@ -1,14 +1,17 @@
 #!/bin/bash
 set -e
 
+# Determine the minerva directory (where this script is located)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd .. && pwd)"
+
 # Set working directory
-cd /home/pi/rpi_server/server || exit 1
+cd "$SCRIPT_DIR" || exit 1
 
 # Load environment variables safely
-if [ -f ../config/settings.env ]; then
+if [ -f config/settings.env ]; then
     set -a
     # shellcheck source=/dev/null
-    . ../config/settings.env
+    . config/settings.env
     set +a
 fi
 

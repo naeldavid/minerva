@@ -13,14 +13,18 @@ DUINO_COIN_USERNAME = os.environ.get('DUINO_COIN_USERNAME', '')
 
 def get_miner_stats() -> Dict[str, Any]:
     """
-    Get mining statistics from Duino-Coin API
+    Get mining statistics from Duino-Coin Public API
+    
+    Requires DUINO_COIN_USERNAME environment variable to fetch stats.
+    If not set, returns placeholder stats (miner still runs locally).
     
     Returns:
         Dictionary containing mining statistics
     """
     try:
         if not DUINO_COIN_USERNAME:
-            logger.warning("DUINO_COIN_USERNAME not set")
+            # Gracefully degrade if username not set
+            logger.debug("DUINO_COIN_USERNAME not set - returning placeholder stats")
             return {
                 'hashrate': 0.0,
                 'total_mined': 0.0,
@@ -69,8 +73,16 @@ def get_miner_stats() -> Dict[str, Any]:
             'estimated_daily_yield': 0.0
         }
         
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching Duino-Coin stats: {e}")
+    except requests.exceptions.ConnectionError as e:
+        logger.debug(f"Could not connect to Duino-Coin API: {e}")
+        return {
+            'hashrate': 0.0,
+            'total_mined': 0.0,
+            'uptime': 0,
+            'estimated_daily_yield': 0.0
+        }
+    except requests.exceptions.Timeout:
+        logger.debug("Duino-Coin API timeout")
         return {
             'hashrate': 0.0,
             'total_mined': 0.0,
@@ -78,7 +90,7 @@ def get_miner_stats() -> Dict[str, Any]:
             'estimated_daily_yield': 0.0
         }
     except Exception as e:
-        logger.error(f"Error getting miner stats: {e}")
+        logger.debug(f"Error getting miner stats: {e}")
         return {
             'hashrate': 0.0,
             'total_mined': 0.0,
