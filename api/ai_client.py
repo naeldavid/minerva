@@ -17,7 +17,7 @@ AI_MODEL = os.environ.get('AI_MODEL', 'llama3')  # Default model
 
 # Global session for connection reuse
 session = requests.Session()
-session.timeout = 30
+session.timeout = 120  # Increased for model loading
 
 # Rate limiting variables
 last_request_time = 0
@@ -64,12 +64,18 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
     
     # Detect API type and prepare payload
     if 'huggingface.co' in AI_API_URL:
-        # Hugging Face Inference API format
+        # Hugging Face Inference API format - try multiple formats
         payload = {
             "inputs": prompt,
             "parameters": {
                 "max_new_tokens": max_tokens,
-                "return_full_text": False
+                "temperature": 0.7,
+                "return_full_text": False,
+                "do_sample": True
+            },
+            "options": {
+                "wait_for_model": True,
+                "use_cache": False
             }
         }
     else:
@@ -86,7 +92,7 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
             AI_API_URL,
             headers=headers,
             json=payload,
-            timeout=30
+            timeout=120  # Increased timeout for model loading
         )
         
         # Raise exception for bad status codes
@@ -97,9 +103,18 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         
         # Parse response based on API type
         if 'huggingface.co' in AI_API_URL:
-            # Hugging Face returns array of results
-            if isinstance(data, list) and len(data) > 0:
-                response_text = data[0].get('generated_text', str(data))
+            # Hugging Face returns array of results or error dict
+            if isinstance(data, dict) and 'error' in data:
+                error_msg = data.get('error', 'Unknown error')
+                logger.error(f"HF API error: {error_msg}")
+                raise ValueError(f"Model error: {error_msg}")
+            elif isinstance(data, list) and len(data) > 0:
+                if isinstance(data[0], dict):
+                    response_text = data[0].get('generated_text', data[0].get('text', str(data)))
+                else:
+                    response_text = str(data[0])
+            elif isinstance(data, dict) and 'generated_text' in data:
+                response_text = data['generated_text']
             else:
                 response_text = str(data)
         elif 'choices' in data and len(data['choices']) > 0:
@@ -117,10 +132,13 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         return format_response(response_text)
         
     except requests.exceptions.Timeout:
+        logger.error(f"AI service timeout")
         raise ValueError("AI service timeout - please try again")
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as e:
+        logger.error(f"AI service connection error: {e}")
         raise ValueError("Could not connect to AI service")
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.error(f"AI service invalid JSON: {e}")
         raise ValueError("Invalid response from AI service")
     except Exception as e:
         logger.error(f"Error processing AI request: {e}")
