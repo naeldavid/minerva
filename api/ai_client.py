@@ -11,7 +11,7 @@ logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
 
 # Get API configuration from environment variables
-AI_API_URL = os.environ.get('AI_API_URL', 'https://api-inference.huggingface.co/models/nae1/eva')
+AI_API_URL = os.environ.get('AI_API_URL', 'https://router.huggingface.co/models/nae1/eva')
 AI_API_KEY = os.environ.get('AI_API_KEY', '')
 AI_MODEL = os.environ.get('AI_MODEL', 'nae1/eva')  # Default model
 
@@ -95,11 +95,36 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
             timeout=120  # Increased timeout for model loading
         )
         
+        # If HF returns 410 for deprecated endpoint, retry with router
+        if response.status_code == 410 and 'huggingface.co' in AI_API_URL and 'router.huggingface.co' not in AI_API_URL:
+            logger.warning("HF API returned 410; retrying with router.huggingface.co")
+            AI_API_URL = 'https://router.huggingface.co/models/' + AI_MODEL
+            response = session.post(AI_API_URL, headers=headers, json=payload, timeout=120)
+
         # Raise exception for bad status codes
-        response.raise_for_status()
-        
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError:
+            # Log body but avoid returning raw HTML from HF to callers
+            content_type = response.headers.get('Content-Type', '')
+            body = response.text[:2000]
+            logger.error(f"HF API HTTP {response.status_code}: {body}")
+            if 'text/html' in content_type:
+                raise ValueError("AI service returned unexpected HTML response; check AI_API_URL and API key.")
+            response.raise_for_status()
+
         # Parse response
-        data = response.json()
+        # Protect against non-JSON responses
+        content_type = response.headers.get('Content-Type', '')
+        if 'application/json' not in content_type:
+            # attempt to parse JSON anyways, but fail gracefully
+            try:
+                data = response.json()
+            except Exception:
+                logger.error("AI service returned non-JSON response")
+                raise ValueError("Invalid response from AI service")
+        else:
+            data = response.json()
         
         # Parse response based on API type
         if 'huggingface.co' in AI_API_URL:

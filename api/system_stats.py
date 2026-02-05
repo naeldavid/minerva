@@ -14,32 +14,34 @@ logging.basicConfig(level=getattr(logging, log_level, logging.WARNING))
 logger = logging.getLogger(__name__)
 
 def get_cpu_temperature():
-    """Get CPU temperature using vcgencmd"""
+    """Get CPU temperature with lightweight fallback.
+
+    Prefer reading from `/sys/class/thermal/thermal_zone0/temp` (very fast).
+    Only fall back to `vcgencmd` if thermal zone is not available.
+    """
     try:
-        # Try vcgencmd first (Raspberry Pi specific)
+        with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+            temp = int(f.read().strip()) / 1000.0
+            return temp
+    except (IOError, OSError, ValueError) as e:
+        logger.debug(f"thermal_zone read failed: {e}")
+
+    try:
         result = subprocess.run(
             ['vcgencmd', 'measure_temp'],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=2,
             check=False
         )
         if result.returncode == 0:
-            # Parse output like "temp=45.2'C"
             temp_str = result.stdout.strip()
             if '=' in temp_str:
                 temp_value = temp_str.split('=')[1].replace("'C", "").replace("°C", "")
                 return float(temp_value)
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, ValueError, IndexError) as e:
-        logger.debug(f"vcgencmd failed: {e}")
-        # Fallback to thermal zone if vcgencmd is not available
-        try:
-            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
-                temp = int(f.read().strip()) / 1000.0
-                return temp
-        except (IOError, OSError, ValueError) as e:
-            logger.warning(f"Could not get CPU temperature: {e}")
-            return None
+    except Exception:
+        logger.debug("vcgencmd unavailable or failed")
+
     return None
 
 def get_uptime():
@@ -71,39 +73,47 @@ def get_network_status():
 def get_system_stats():
     """Get all system statistics"""
     try:
+        # Lightweight caching to reduce overhead on low-power devices (Pi Zero W)
+        CACHE_TTL = 10.0  # seconds
+        if not hasattr(get_system_stats, '_cache'):
+            get_system_stats._cache = {'ts': 0, 'data': None}
+
+        now = time.time()
+        if get_system_stats._cache['data'] and (now - get_system_stats._cache['ts'] < CACHE_TTL):
+            return get_system_stats._cache['data']
+
         if not PSUTIL_AVAILABLE:
-            # Fallback implementation when psutil is not available
-            return {
-                'cpu_usage': get_fallback_cpu_usage(),
-                'memory_usage': get_fallback_memory_usage(),
-                'temperature': get_cpu_temperature(),
-                'uptime': get_uptime(),
-                'network': get_network_status()
-            }
-        
-        # CPU usage
-        cpu_percent = psutil.cpu_percent(interval=1)
-        
-        # Memory usage
-        memory = psutil.virtual_memory()
-        memory_percent = memory.percent
-        
-        # Temperature
+            cpu = get_fallback_cpu_usage()
+            memory = get_fallback_memory_usage()
+        else:
+            # Non-blocking CPU percent call (do not sleep) to avoid delays
+            try:
+                cpu = psutil.cpu_percent(interval=None)
+            except Exception:
+                cpu = get_fallback_cpu_usage()
+
+            try:
+                memory = psutil.virtual_memory().percent
+            except Exception:
+                memory = get_fallback_memory_usage()
+
         temperature = get_cpu_temperature()
-        
-        # Uptime
         uptime = get_uptime()
-        
-        # Network
         network = get_network_status()
-        
-        return {
-            'cpu_usage': cpu_percent,
-            'memory_usage': memory_percent,
+
+        data = {
+            'cpu_usage': cpu,
+            'memory_usage': memory,
             'temperature': temperature,
             'uptime': uptime,
             'network': network
         }
+
+        # update cache
+        get_system_stats._cache['ts'] = now
+        get_system_stats._cache['data'] = data
+
+        return data
     except Exception as e:
         logger.error(f"Error getting system stats: {e}")
         raise

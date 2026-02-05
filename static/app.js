@@ -10,28 +10,10 @@ function sanitizeHTML(str) {
     return div.innerHTML;
 }
 
-// Request stats updates every 3 seconds using simple polling
+// Request system stats updates every 10 seconds to reduce load on Pi Zero
 let statsInterval = setInterval(function() {
-    // Fetch system stats
-    fetch('/api/system-stats')
-        .then(response => response.json())
-        .then(data => {
-            updateSystemStats(data);
-        })
-        .catch(error => {
-            console.error('Error fetching system stats:', error);
-        });
-    
-    // Fetch mining stats
-    fetch('/api/miner-stats')
-        .then(response => response.json())
-        .then(data => {
-            updateMiningStats(data);
-        })
-        .catch(error => {
-            console.error('Error fetching mining stats:', error);
-        });
-}, 3000);
+    fetchSystemStats();
+}, 10000);
 
 // Stop polling when page is hidden to save resources
 document.addEventListener('visibilitychange', function() {
@@ -40,8 +22,7 @@ document.addEventListener('visibilitychange', function() {
     } else {
         statsInterval = setInterval(function() {
             fetchSystemStats();
-            fetchMiningStats();
-        }, 3000);
+        }, 10000);
     }
 });
 
@@ -61,26 +42,9 @@ function fetchSystemStats() {
         });
 }
 
-function fetchMiningStats() {
-    fetch('/api/miner-stats')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            updateMiningStats(data);
-        })
-        .catch(error => {
-            console.error('Error fetching mining stats:', error);
-        });
-}
-
 // Initial stats request
 document.addEventListener('DOMContentLoaded', function() {
     fetchSystemStats();
-    fetchMiningStats();
 });
 
 // Update system stats display
@@ -106,29 +70,7 @@ function updateSystemStats(stats) {
     }
 }
 
-// Update mining stats display
-function updateMiningStats(stats) {
-    if (!stats || typeof stats !== 'object') {
-        return;
-    }
-    
-    if (typeof stats.hashrate === 'number') {
-        document.getElementById('hashrate').textContent = `${Math.round(stats.hashrate)} H/s`;
-    }
-    
-    if (typeof stats.total_mined === 'number') {
-        document.getElementById('total-mined').textContent = `${stats.total_mined.toFixed(4)} DUCO`;
-    }
-    
-    if (typeof stats.uptime === 'number') {
-        const hours = (stats.uptime / 3600).toFixed(1);
-        document.getElementById('miner-uptime').textContent = `${hours} hrs`;
-    }
-    
-    if (typeof stats.estimated_daily_yield === 'number') {
-        document.getElementById('daily-yield').textContent = `${stats.estimated_daily_yield.toFixed(4)} DUCO`;
-    }
-}
+// Mining features removed — dashboard focused on system + AI chat
 
 // Handle chat form submission
 chatForm.addEventListener('submit', function(e) {

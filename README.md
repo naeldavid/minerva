@@ -1,244 +1,116 @@
-# Minerva
+# Minerva — AI chat dashboard (Pi Zero W optimized)
 
-**Minerva** (Miner + EVA) is a lightweight web-based control panel for Raspberry Pi Zero that combines cryptocurrency mining management with an integrated AI assistant. It provides:
-- AI study assistant (EVA) via Hugging Face Inference API (cloud-based)
-- Real-time system performance monitoring
-- Live crypto mining statistics with Duino-Coin integration
-- Continuous operation with minimal resource usage on low-power devices
+Minerva is a lightweight, Pi Zero W–friendly web dashboard that provides a simple AI chat interface powered by a Hugging Face cloud model and a small system-status panel. This trimmed-down edition focuses on minimal resource usage and reliable behavior on low-memory devices.
+
+Highlights:
+- AI chat powered by a Hugging Face hosted model (cloud inference)
+- Lightweight system stats: CPU, memory, temperature, uptime
+- Minimal dependencies and low polling frequency for Pi Zero W
 
 ## Features
 
-### Study Assistant (EVA)
-- Web-based chat interface powered by custom AI model
-- Cloud-based inference via Hugging Face (no local AI processing)
-- Minimal black terminal-style UI with white accents
-- Multi-message conversation history
-
-### System Monitoring
-- CPU usage percentage
-- RAM usage percentage
-- CPU temperature
-- System uptime
-- Network status
-
-### Mining Statistics
-- Total DUCO mined
-- Current hashrate estimate
-- Miner configuration
-- Thread count
+- AI Chat: send messages to your Hugging Face model and receive responses
+- System Monitoring: lightweight periodic stats (cached on server)
+- Small footprint: tuned for Raspberry Pi Zero W (reduced polling, single-threaded server)
 
 ## Project Structure
 
 ```
 minerva/
-├── app.py                   # Main Flask application
-├── manage.py                # Service management script
-├── monitor_mining.py        # Mining monitoring with CPU throttling
+├── app.py                   # Main Flask application (single-threaded run for Pi Zero)
 ├── requirements.txt         # Python dependencies
 ├── LICENSE                  # Project license
-├── install.sh               # Installation script
-├── README.md                # This file
-├── .gitignore               # Git ignore rules
 ├── api/
-│   ├── ai_client.py         # AI API client for EVA assistant
-│   ├── system_stats.py      # System statistics collection
-│   └── miner_stats.py       # Duino-Coin statistics reader
+│   ├── ai_client.py         # Hugging Face client (router.huggingface.co default)
+│   └── system_stats.py      # Lightweight system statistics with caching
 ├── config/
 │   └── settings.env         # Environment configuration file
 ├── templates/
-│   └── dashboard.html       # Main dashboard template
+│   └── dashboard.html       # Main dashboard template (AI chat + system widget)
 ├── static/
 │   ├── style.css            # Dashboard styling
-│   └── app.js               # Frontend JavaScript
+│   └── app.js               # Frontend JavaScript (reduced polling)
 └── services/
-    ├── rpi-dashboard.service # systemd service file
-    └── startup.sh            # Service startup script
+    └── rpi-dashboard.service # Optional systemd service file
 ```
 
-## Installation
+## Quick Start (Raspberry Pi Zero W)
 
-1. Clone the repository:
+1. Clone the repo and install dependencies:
+
 ```bash
-git clone https://github.com/naeldavid/minerva.git
+git clone https://github.com/nae1/minerva.git
 cd minerva
+python3 -m pip install -r requirements.txt
 ```
 
-2. Run the installation script:
-```bash
-chmod +x install.sh
-./install.sh
-```
+2. Configure `config/settings.env` (required):
 
-3. Configure environment variables:
-```bash
-nano config/settings.env
-```
+Open the file and set at minimum:
 
-**Required configuration:**
-```bash
-# Generate a strong secret key
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+```ini
+# Flask
+SECRET_KEY=generate-with-python3-c-import-secrets-print-secrets-token-hex-32
 
-# Configure AI API (Hugging Face)
-# Get your token from: https://huggingface.co/settings/tokens
-AI_API_URL=https://api-inference.huggingface.co/models/nae1/eva
+# Hugging Face (default uses router endpoint)
+AI_API_URL=https://router.huggingface.co/models/nae1/eva
 AI_API_KEY=hf_your_token_here
 AI_MODEL=nae1/eva
-
-# Configure Duino-Coin
-DUINO_COIN_PATH=/home/pi/duino-coin
-DUINO_COIN_USERNAME=your-username
-```
-
-4. Start the server:
-
-**Direct mode:**
-```bash
-python3 app.py
-# Access at http://<raspberry-pi-ip>:5000
-```
-
-**Production with systemd:**
-```bash
-sudo python3 manage.py setup
-sudo systemctl start rpi-dashboard.service
-```
-
-## Configuration
-
-Edit `config/settings.env`:
-
-```bash
-# Flask Settings
-SECRET_KEY=your-secret-key-here  # Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
-FLASK_ENV=production
-FLASK_DEBUG=False
-
-# AI API Settings (Hugging Face)
-# Get your token from: https://huggingface.co/settings/tokens
-AI_API_URL=https://api-inference.huggingface.co/models/nae1/eva
-AI_API_KEY=hf_your_token_here
-AI_MODEL=nae1/eva
-
-# Miner Settings (Duino-Coin)
-DUINO_COIN_PATH=/home/pi/duino-coin
-DUINO_COIN_USERNAME=your-username
 
 # Logging
 LOG_LEVEL=WARNING
 ```
 
-### Hugging Face AI Integration
+Notes:
+- Obtain `AI_API_KEY` from https://huggingface.co/settings/tokens
+- `AI_API_URL` defaults to the router endpoint (`router.huggingface.co`) which is recommended by Hugging Face.
 
-Minerva uses Hugging Face Inference API for cloud-based AI processing. This means:
-- **No local AI processing** - All inference happens on Hugging Face servers
-- **Minimal resource usage** - Perfect for Raspberry Pi Zero W
-- **First request delay** - Model loading takes 20-60 seconds on first call
-- **Fast subsequent requests** - Model stays loaded for ~15 minutes
+3. Run the app (recommended for Pi Zero W):
 
-**Setup:**
 ```bash
-# 1. Get Hugging Face API token
-# Visit: https://huggingface.co/settings/tokens
-# Create a new token (read access is sufficient)
-
-# 2. Update Minerva config
-nano ~/minerva/config/settings.env
-# Set: AI_API_URL=https://api-inference.huggingface.co/models/nae1/eva
-# Set: AI_API_KEY=hf_your_token_here
-# Set: AI_MODEL=nae1/eva
-
-# 3. Restart dashboard
-python3 ~/minerva/app.py
+python3 app.py
 ```
 
-**Note:** You can use any Hugging Face model by changing the AI_API_URL and AI_MODEL values.
+This runs Flask single-threaded and without the reloader (lower memory use). The dashboard is available at `http://<pi-ip>:5000`.
 
-### Duino-Coin Mining Integration
-
-Minerva reads mining statistics from Duino-Coin configuration files.
-
-**Setup:**
-```bash
-# 1. Install Duino-Coin
-cd ~
-git clone https://github.com/revoxhere/duino-coin.git
-cd duino-coin
-python3 PC_Miner.py  # Configure username and settings
-
-# 2. Update Minerva config
-nano ~/minerva/config/settings.env
-# Set: DUINO_COIN_PATH=/home/pi/duino-coin
-# Set: DUINO_COIN_USERNAME=your-username
-
-# 3. Start both
-python3 ~/duino-coin/PC_Miner.py &  # Start miner
-python3 ~/minerva/app.py             # Start dashboard
-```
+Optional: create a systemd service using `services/rpi-dashboard.service` to run on boot.
 
 ## Usage
 
-**Access:** `http://<raspberry-pi-ip>:5000` (accessible on local network)
+- Open the dashboard in a browser on the same network and use the chat box to talk to your model.
+- AI requests are proxied to Hugging Face — the first request may take longer while the model loads.
 
-**Features:**
-- **AI Chat** - Ask EVA questions via Hugging Face cloud API
-- **System Stats** - Real-time CPU, RAM, temperature, uptime
-- **Mining Stats** - Hashrate, DUCO mined, thread count
-- **Minimal UI** - Black terminal theme with white text
+## Configuration Reference
 
-## Management
+- `AI_API_URL` — Full URL to the Hugging Face inference endpoint. Default: `https://router.huggingface.co/models/nae1/eva`
+- `AI_API_KEY` — Your Hugging Face token (required for private models or higher rate limits)
+- `AI_MODEL` — Model identifier (e.g., `nae1/eva`)
+- `LOG_LEVEL` — Logging verbosity; use `WARNING` or `ERROR` on Pi Zero
 
-```bash
-# Service control
-sudo python3 manage.py start|stop|restart|status
+Security note: Keep `AI_API_KEY` secret. This project is intended for local networks; if exposing publicly, use a reverse proxy with authentication.
 
-# View logs
-sudo journalctl -u rpi-dashboard.service -f
+## Performance Optimizations for Pi Zero W
 
-# Monitor mining with CPU throttling
-python3 monitor_mining.py --threshold 50
-```
+- Server: single-threaded Flask (`threaded=False`, `use_reloader=False`) to reduce memory overhead.
+- Polling: frontend polls system stats every 10 seconds (reduced from 3s).
+- Caching: `api/system_stats.py` caches stats for 10s to avoid repeated work.
+- Lightweight temp read: reads `/sys/class/thermal/thermal_zone0/temp` first (fast), falls back to `vcgencmd` only if necessary.
+- Minimal logging: default `LOG_LEVEL=WARNING`.
 
-## Updating
+Recommended tuning:
+- Lower polling frequency further if you don't need frequent updates.
+- Run behind a small reverse proxy (nginx) if exposing externally.
 
-```bash
-cd ~/minerva
-git pull
-pip3 install -r requirements.txt
-sudo systemctl restart rpi-dashboard.service
-```
+## Health & Troubleshooting
 
-## Security
+- Health endpoint: `GET /health` returns module availability and timestamp.
+- If AI calls return errors, confirm `AI_API_KEY` and `AI_API_URL` are correct.
+- If the model takes a long time to respond, it's normal on first load; subsequent calls are faster.
 
-- **Local network only** - Binds to 0.0.0.0 (accessible on LAN)
-- **Input validation** - All user inputs sanitized
-- **XSS protection** - Content Security Policy headers
-- **Updated dependencies** - Flask >=3.0.0, requests >=2.32.0
-- **No default keys** - Auto-generates secure SECRET_KEY
+## Development & Contributing
 
-**Note:** Only use on trusted local networks. For internet exposure, add firewall rules or reverse proxy with authentication.
-
-## Performance
-
-**Optimized for Raspberry Pi Zero W:**
-- **Memory:** ~20-30MB (dashboard only, AI runs on cloud)
-- **CPU:** <5% idle, 50-70% when mining (no AI processing locally)
-- **Codebase:** ~25KB Python
-- **Polling:** 3-second updates (stops when page hidden)
-- **No WebSockets:** Simple HTTP polling
-- **Minimal logging:** WARNING level only
-- **Cloud AI:** All AI inference on Hugging Face servers
-
-**Expected performance:**
-- Dashboard load: 2-3 seconds
-- Update latency: <500ms
-- AI response: 20-60s first call, 2-5s subsequent calls
-- Duino-Coin hashrate: 1-3 kH/s (1 thread)
-
-## Contributing
-
-Contributions are welcome! Please ensure all changes maintain the performance optimizations and low resource usage requirements.
+Contributions welcome. Keep changes lightweight and Pi-Zero-friendly. If adding features that consume CPU or memory, include a configuration option to disable them on low-end devices.
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+See [LICENSE](LICENSE) for license details.

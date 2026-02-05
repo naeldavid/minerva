@@ -31,12 +31,8 @@ except ImportError:
     logger.warning("System stats module not available")
     system_stats_available = False
 
-try:
-    from api.miner_stats import get_miner_stats
-    miner_stats_available = True
-except ImportError:
-    logger.warning("Miner stats module not available")
-    miner_stats_available = False
+# Miner stats removed — mining integration deprecated in this simplified build
+miner_stats_available = False
 
 try:
     from api.ai_client import process_ai_request
@@ -77,30 +73,7 @@ def system_stats():
             'network': {}
         }), 200
 
-@app.route('/api/miner-stats')
-def miner_stats():
-    """API endpoint for mining statistics"""
-    if miner_stats_available:
-        try:
-            stats = get_miner_stats()
-            return jsonify(stats)
-        except Exception as e:
-            logger.error(f"Error getting miner stats: {e}")
-            # Return partial stats on error instead of 500
-            return jsonify({
-                'hashrate': 0.0,
-                'total_mined': 0.0,
-                'uptime': 0,
-                'estimated_daily_yield': 0.0
-            }), 200
-    else:
-        # Return empty stats instead of error
-        return jsonify({
-            'hashrate': 0.0,
-            'total_mined': 0.0,
-            'uptime': 0,
-            'estimated_daily_yield': 0.0
-        }), 200
+# /api/miner-stats removed — mining endpoints deprecated
 
 @app.route('/health')
 def health_check():
@@ -110,7 +83,6 @@ def health_check():
         "timestamp": time.time(),
         "modules": {
             "system_stats": system_stats_available,
-            "miner_stats": miner_stats_available,
             "ai_client": ai_client_available
         }
     })
@@ -153,5 +125,5 @@ def chat():
 
 if __name__ == '__main__':
     # Run with minimal configuration for Raspberry Pi Zero
-    # Accessible on local network
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Use single-threaded server to reduce memory/CPU overhead on Pi Zero W
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=False, use_reloader=False)
