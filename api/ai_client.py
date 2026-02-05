@@ -136,7 +136,9 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         raise ValueError("AI service timeout - please try again")
     except requests.exceptions.RequestException as e:
         logger.error(f"AI service connection error: {e}")
-        raise ValueError("Could not connect to AI service")
+        logger.error(f"Response status: {getattr(e.response, 'status_code', 'N/A')}")
+        logger.error(f"Response body: {getattr(e.response, 'text', 'N/A')}")
+        raise ValueError(f"Could not connect to AI service: {str(e)}")
     except json.JSONDecodeError as e:
         logger.error(f"AI service invalid JSON: {e}")
         raise ValueError("Invalid response from AI service")
