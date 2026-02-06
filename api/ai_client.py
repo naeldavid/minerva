@@ -26,7 +26,7 @@ except ImportError:
 def process_ai_request(prompt: str, max_tokens: int = 500, image_bytes: Optional[bytes] = None) -> Dict[str, Any]:
     """
     Process a request to the AI API and return structured response.
-    Calls HuggingFace Inference API directly with proper formatting for text-generation and vision-language models.
+    Uses HuggingFace InferenceClient with fallback for vision-language models.
     
     Args:
         prompt: User's input prompt
@@ -59,118 +59,96 @@ def process_ai_request(prompt: str, max_tokens: int = 500, image_bytes: Optional
         max_tokens = 500
     
     try:
-        import requests
-        import json
-        import base64
-
-        headers = {
-            'Authorization': f'Bearer {AI_API_KEY}'
-        }
-        
-        api_url = f"https://api-inference.huggingface.co/models/{AI_MODEL}"
-        
-        # Build payload for text-generation or multimodal models
-        if image_bytes and len(image_bytes) > 0:
-            # Multimodal: encode image and include text
-            img_base64 = base64.b64encode(image_bytes).decode('utf-8')
-            # Try to infer image type; default to JPEG
-            image_type = "jpeg"
+        if HF_CLIENT_AVAILABLE:
+            # Use InferenceClient for Inference Providers support
+            client = InferenceClient(api_key=AI_API_KEY)
+            response_text = None
             
-            # Payload for vision-language models (image + question format)
-            payload = {
-                "inputs": {
-                    "image": img_base64,
-                    "question": prompt
-                },
-                "parameters": {
-                    "max_new_tokens": max_tokens
-                }
-            }
-            headers['Content-Type'] = 'application/json'
+            # If image provided, try vision-language tasks first
+            if image_bytes and len(image_bytes) > 0:
+                logger.debug(f"Attempting multimodal request with image ({len(image_bytes)} bytes) to {AI_MODEL}")
+                
+                # Try image_to_text (good for caption/description models)
+                try:
+                    logger.debug("Trying image_to_text...")
+                    result = client.image_to_text(image=image_bytes, model=AI_MODEL)
+                    response_text = result if isinstance(result, str) else str(result)
+                    logger.debug("image_to_text succeeded")
+                except Exception as e:
+                    logger.debug(f"image_to_text failed: {e}")
+                
+                # If image_to_text failed, try visual_question_answering
+                if not response_text:
+                    try:
+                        logger.debug(f"Trying visual_question_answering with question: {prompt[:50]}...")
+                        result = client.visual_question_answering(image=image_bytes, question=prompt, model=AI_MODEL)
+                        if isinstance(result, dict):
+                            response_text = result.get('answer') or str(result)
+                        elif isinstance(result, list) and len(result) > 0:
+                            first = result[0]
+                            response_text = first.get('answer', str(first)) if isinstance(first, dict) else str(first)
+                        else:
+                            response_text = str(result)
+                        logger.debug("visual_question_answering succeeded")
+                    except Exception as e:
+                        logger.debug(f"visual_question_answering failed: {e}")
+                
+                # If all vision tasks failed, log and try text-only fallback
+                if not response_text:
+                    logger.debug("All multimodal methods failed. Falling back to text-only inference.")
             
-            logger.debug(f"Sending multimodal request to {AI_MODEL} with image ({len(image_bytes)} bytes) and prompt")
-            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            # Text-only inference (or fallback from failed multimodal)
+            if not response_text:
+                try:
+                    logger.debug(f"Attempting text_generation on {AI_MODEL}")
+                    result = client.text_generation(
+                        prompt=prompt,
+                        model=AI_MODEL,
+                        max_new_tokens=max_tokens,
+                        temperature=0.7,
+                        do_sample=True
+                    )
+                    response_text = result if isinstance(result, str) else str(result)
+                    logger.debug("text_generation succeeded")
+                except Exception as tg_err:
+                    logger.debug(f"text_generation failed: {tg_err}")
+                    # Last resort: try chat_completion
+                    try:
+                        logger.debug(f"Attempting chat_completion on {AI_MODEL}")
+                        result = client.chat_completion(
+                            messages=[{"role": "user", "content": prompt}],
+                            model=AI_MODEL,
+                            max_tokens=max_tokens,
+                            temperature=0.7
+                        )
+                        if result and hasattr(result, 'choices') and len(result.choices) > 0:
+                            response_text = result.choices[0].message.content
+                        else:
+                            response_text = str(result)
+                        logger.debug("chat_completion succeeded")
+                    except Exception as cc_err:
+                        logger.debug(f"chat_completion also failed: {cc_err}")
+                        # If all methods fail, provide guidance
+                        error_msg = str(tg_err) or str(cc_err)
+                        if "not a chat model" in error_msg.lower():
+                            raise ValueError(
+                                f"Model '{AI_MODEL}' is a vision-language model and is not available on free Inference Providers. "
+                                "To use this model, deploy it to a HuggingFace Inference Endpoint: "
+                                "https://huggingface.co/docs/hub/en/inference-endpoints"
+                            )
+                        else:
+                            raise ValueError(f"Model inference failed: {error_msg}")
+            
+            if not response_text:
+                raise ValueError("No response from model")
+            
+            return format_response(response_text)
+        
         else:
-            # Text-only: use text-generation format
-            payload = {
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": max_tokens,
-                    "temperature": 0.7,
-                    "do_sample": True
-                }
-            }
-            headers['Content-Type'] = 'application/json'
-            
-            logger.debug(f"Sending text-only request to {AI_MODEL}")
-            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
-        
-        # Log response status
-        logger.debug(f"API response status: {response.status_code}")
-        
-        # Handle HTTP errors
-        if response.status_code != 200:
-            error_detail = ""
-            try:
-                error_data = response.json()
-                if isinstance(error_data, dict):
-                    error_detail = error_data.get('error', str(error_data))
-                    if 'message' in error_data:
-                        error_detail = error_data['message']
-            except:
-                error_detail = response.text[:200] if response.text else "Unknown error"
-            
-            logger.error(f"HF API error {response.status_code}: {error_detail}")
-            
-            # Provide helpful error message
-            if "not a chat model" in error_detail.lower():
-                raise ValueError(
-                    f"Model {AI_MODEL} is a vision-language model. "
-                    "Please upload an image with your message, or use a different model."
-                )
-            elif response.status_code == 401:
-                raise ValueError("Authentication failed. Check your AI_API_KEY.")
-            elif response.status_code == 404:
-                raise ValueError(f"Model {AI_MODEL} not found or not accessible.")
-            else:
-                raise ValueError(f"API error: {error_detail}")
-        
-        # Parse response
-        data = response.json()
-        response_text = None
-        
-        # Handle different response formats
-        if isinstance(data, list) and len(data) > 0:
-            first = data[0]
-            if isinstance(first, dict):
-                # Try common keys: generated_text, answer, result
-                if 'generated_text' in first:
-                    response_text = first['generated_text']
-                elif 'answer' in first:
-                    response_text = first['answer']
-                else:
-                    response_text = str(first)
-            else:
-                response_text = str(first)
-        elif isinstance(data, dict):
-            if 'generated_text' in data:
-                response_text = data['generated_text']
-            elif 'answer' in data:
-                response_text = data['answer']
-            elif 'result' in data:
-                response_text = str(data['result'])
-            else:
-                response_text = str(data)
-        else:
-            response_text = str(data)
-        
-        if not response_text:
-            raise ValueError("Empty response from API")
-        
-        return format_response(response_text)
+            raise ValueError("HuggingFace SDK not installed. Install with: pip install huggingface_hub")
         
     except ValueError as ve:
-        logger.error(f"Validation error: {ve}")
+        logger.error(f"API Error: {ve}")
         raise
     except Exception as e:
         logger.exception("Error processing AI request:")
