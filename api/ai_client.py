@@ -1,7 +1,7 @@
 import os
 import logging
 import html
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # Configure minimal logging
 log_level = os.environ.get('LOG_LEVEL', 'WARNING')
@@ -23,7 +23,7 @@ except ImportError:
     session = requests.Session()
     session.timeout = 120
 
-def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
+def process_ai_request(prompt: str, max_tokens: int = 500, image_bytes: Optional[bytes] = None) -> Dict[str, Any]:
     """
     Process a request to the AI API and return structured response.
     Uses HuggingFace InferenceClient for automatic model routing and format handling.
@@ -61,66 +61,112 @@ def process_ai_request(prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         if HF_CLIENT_AVAILABLE:
             # Use InferenceClient - handles routing and format automatically
             client = InferenceClient(api_key=AI_API_KEY)
-            
-            try:
-                # Try chat completion first (preferred for conversational models)
-                response = client.chat_completion(
-                    model=AI_MODEL,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=max_tokens,
-                    temperature=0.7
-                )
-                
-                if response and hasattr(response, 'choices') and len(response.choices) > 0:
-                    response_text = response.choices[0].message.content
-                else:
-                    response_text = str(response)
-                
-            except Exception as chat_error:
-                # Fall back to text generation if chat fails
-                logger.debug(f"Chat completion failed, trying text generation: {chat_error}")
-                response = client.text_generation(
-                    model=AI_MODEL,
-                    prompt=prompt,
-                    max_new_tokens=max_tokens,
-                    temperature=0.7,
-                    do_sample=True
-                )
-                response_text = response if isinstance(response, str) else str(response)
-        
+
+            # If an image is provided, try vision-language APIs first
+            if image_bytes:
+                try:
+                    # Try visual question answering (image + prompt)
+                    vqa = client.visual_question_answering(image=image_bytes, question=prompt, model=AI_MODEL)
+                    if isinstance(vqa, dict) and 'answer' in vqa:
+                        response_text = vqa['answer']
+                    elif isinstance(vqa, list) and len(vqa) > 0:
+                        # Some providers return a list of answers
+                        first = vqa[0]
+                        response_text = first.get('answer', str(vqa)) if isinstance(first, dict) else str(first)
+                    else:
+                        response_text = str(vqa)
+                except Exception as vqa_err:
+                    logger.debug(f"VQA/image handling failed: {vqa_err}")
+                    # Try image_to_text as a fallback
+                    try:
+                        it = client.image_to_text(image=image_bytes, model=AI_MODEL)
+                        response_text = it if isinstance(it, str) else str(it)
+                    except Exception as it_err:
+                        logger.debug(f"image_to_text also failed: {it_err}")
+                        # Fall back to chat/text without the image
+                        try:
+                            chat_resp = client.chat_completion(model=AI_MODEL, messages=[{"role": "user", "content": prompt}], max_tokens=max_tokens, temperature=0.7)
+                            if chat_resp and hasattr(chat_resp, 'choices') and len(chat_resp.choices) > 0:
+                                response_text = chat_resp.choices[0].message.content
+                            else:
+                                response_text = str(chat_resp)
+                        except Exception as chat_err2:
+                            logger.debug(f"Chat fallback failed after image attempts: {chat_err2}")
+                            raise
+            else:
+                # No image - prefer chat completion for conversational models
+                try:
+                    response = client.chat_completion(
+                        model=AI_MODEL,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=max_tokens,
+                        temperature=0.7
+                    )
+                    if response and hasattr(response, 'choices') and len(response.choices) > 0:
+                        response_text = response.choices[0].message.content
+                    else:
+                        response_text = str(response)
+                except Exception as chat_error:
+                    # Fall back to text generation if chat fails
+                    logger.debug(f"Chat completion failed, trying text generation: {chat_error}")
+                    response = client.text_generation(
+                        model=AI_MODEL,
+                        prompt=prompt,
+                        max_new_tokens=max_tokens,
+                        temperature=0.7,
+                        do_sample=True
+                    )
+                    response_text = response if isinstance(response, str) else str(response)
+
         else:
             # Fallback: use requests with the old API format
             logger.warning("Using fallback requests method (install huggingface_hub for better support)")
             import requests
             import json
-            
+
             headers = {
-                'Content-Type': 'application/json',
                 'Authorization': f'Bearer {AI_API_KEY}'
             }
-            
-            # Try old API format
+
             api_url = f"https://api-inference.huggingface.co/models/{AI_MODEL}"
-            payload = {
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": max_tokens,
-                    "temperature": 0.7,
-                    "do_sample": True
+
+            if image_bytes:
+                # Send multipart/form-data with file and text input
+                files = {
+                    'image': ('image.jpg', image_bytes)
                 }
-            }
-            
-            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+                data = {
+                    'inputs': prompt
+                }
+                response = requests.post(api_url, headers=headers, data=data, files=files, timeout=120)
+            else:
+                headers['Content-Type'] = 'application/json'
+                payload = {
+                    "inputs": prompt,
+                    "parameters": {
+                        "max_new_tokens": max_tokens,
+                        "temperature": 0.7,
+                        "do_sample": True
+                    }
+                }
+                response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+
             response.raise_for_status()
             data = response.json()
-            
+
             if isinstance(data, list) and len(data) > 0:
                 response_text = data[0].get('generated_text', str(data))
-            elif isinstance(data, dict) and 'generated_text' in data:
-                response_text = data['generated_text']
+            elif isinstance(data, dict):
+                # Some image models return {'answer': '...'} or {'generated_text': '...'}
+                if 'answer' in data:
+                    response_text = data.get('answer')
+                elif 'generated_text' in data:
+                    response_text = data.get('generated_text')
+                else:
+                    response_text = str(data)
             else:
                 response_text = str(data)
-        
+
         return format_response(response_text)
         
     except ValueError as ve:

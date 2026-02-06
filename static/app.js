@@ -2,6 +2,7 @@
 const chatHistory = document.getElementById('chat-history');
 const chatForm = document.getElementById('chat-form');
 const userInput = document.getElementById('user-input');
+const imageInput = document.getElementById('image-input');
 
 // Sanitize HTML to prevent XSS
 function sanitizeHTML(str) {
@@ -102,14 +103,21 @@ chatForm.addEventListener('submit', function(e) {
     // Show loading indicator
     const loadingMsg = addMessageToChat('...', 'assistant', true);
     
-    // Send request to server
-    fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: message })
-    })
+    // Send request to server. If an image is attached, use FormData multipart.
+    let fetchOptions = { method: 'POST' };
+    if (imageInput && imageInput.files && imageInput.files.length > 0) {
+        const file = imageInput.files[0];
+        const form = new FormData();
+        form.append('message', message);
+        form.append('image', file, file.name);
+        fetchOptions.body = form;
+        // DO NOT set Content-Type when using FormData; browser will set the boundary.
+    } else {
+        fetchOptions.headers = { 'Content-Type': 'application/json' };
+        fetchOptions.body = JSON.stringify({ message: message });
+    }
+
+    fetch('/api/chat', fetchOptions)
     .then(response => {
         if (!response.ok) {
             throw new Error('Network response was not ok');

@@ -21,7 +21,8 @@ if not secret_key or 'generate-with-python3' in secret_key or secret_key == 'you
     logger.warning("For production, set SECRET_KEY in config/settings.env")
     secret_key = secrets.token_hex(32)
 app.config['SECRET_KEY'] = secret_key
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024  # 16KB max request size
+# Increase max content size to allow small image uploads (2MB)
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max request size
 
 # Import modules (will be implemented in separate files)
 try:
@@ -99,21 +100,31 @@ def chat():
         return jsonify({"response": "AI unavailable. System is running without AI support."}), 200
     
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON"}), 400
-        
-        user_message = data.get('message', '').strip()
-        
+        # Support both JSON and multipart/form-data (for image uploads)
+        user_message = None
+        image_bytes = None
+
+        if request.content_type and request.content_type.startswith('multipart/form-data'):
+            # Multipart form with optional image
+            user_message = (request.form.get('message') or '').strip()
+            image_file = request.files.get('image')
+            if image_file:
+                image_bytes = image_file.read()
+        else:
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "Invalid JSON"}), 400
+            user_message = (data.get('message', '') or '').strip()
+
         if not user_message:
             return jsonify({"error": "No message provided"}), 400
-        
+
         # Validate message length
         if len(user_message) > 2000:
             return jsonify({"error": "Message too long (max 2000 characters)"}), 400
-        
-        # Process the AI request
-        response = process_ai_request(user_message)
+
+        # Process the AI request (pass image bytes if provided)
+        response = process_ai_request(user_message, image_bytes=image_bytes)
         return jsonify({"response": response})
     except ValueError as e:
         # Return 200 with message instead of 503 for better UX
