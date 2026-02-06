@@ -26,11 +26,12 @@ except ImportError:
 def process_ai_request(prompt: str, max_tokens: int = 500, image_bytes: Optional[bytes] = None) -> Dict[str, Any]:
     """
     Process a request to the AI API and return structured response.
-    Uses HuggingFace InferenceClient for automatic model routing and format handling.
+    Calls HuggingFace Inference API directly with proper formatting for text-generation and vision-language models.
     
     Args:
         prompt: User's input prompt
         max_tokens: Maximum tokens for the response
+        image_bytes: Optional image bytes for multimodal models
         
     Returns:
         Dictionary containing the AI response formatted for display
@@ -58,122 +59,121 @@ def process_ai_request(prompt: str, max_tokens: int = 500, image_bytes: Optional
         max_tokens = 500
     
     try:
-        if HF_CLIENT_AVAILABLE:
-            # Use InferenceClient - handles routing and format automatically
-            client = InferenceClient(api_key=AI_API_KEY)
+        import requests
+        import json
+        import base64
 
-            # If an image is provided, try vision-language APIs first
-            if image_bytes:
-                try:
-                    # Try visual question answering (image + prompt)
-                    vqa = client.visual_question_answering(image=image_bytes, question=prompt, model=AI_MODEL)
-                    if isinstance(vqa, dict) and 'answer' in vqa:
-                        response_text = vqa['answer']
-                    elif isinstance(vqa, list) and len(vqa) > 0:
-                        # Some providers return a list of answers
-                        first = vqa[0]
-                        response_text = first.get('answer', str(vqa)) if isinstance(first, dict) else str(first)
-                    else:
-                        response_text = str(vqa)
-                except Exception as vqa_err:
-                    logger.debug(f"VQA/image handling failed: {vqa_err}")
-                    # Try image_to_text as a fallback
-                    try:
-                        it = client.image_to_text(image=image_bytes, model=AI_MODEL)
-                        response_text = it if isinstance(it, str) else str(it)
-                    except Exception as it_err:
-                        logger.debug(f"image_to_text also failed: {it_err}")
-                        # Fall back to chat/text without the image
-                        try:
-                            chat_resp = client.chat_completion(model=AI_MODEL, messages=[{"role": "user", "content": prompt}], max_tokens=max_tokens, temperature=0.7)
-                            if chat_resp and hasattr(chat_resp, 'choices') and len(chat_resp.choices) > 0:
-                                response_text = chat_resp.choices[0].message.content
-                            else:
-                                response_text = str(chat_resp)
-                        except Exception as chat_err2:
-                            logger.debug(f"Chat fallback failed after image attempts: {chat_err2}")
-                            raise
-            else:
-                # No image - prefer chat completion for conversational models
-                try:
-                    response = client.chat_completion(
-                        model=AI_MODEL,
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=max_tokens,
-                        temperature=0.7
-                    )
-                    if response and hasattr(response, 'choices') and len(response.choices) > 0:
-                        response_text = response.choices[0].message.content
-                    else:
-                        response_text = str(response)
-                except Exception as chat_error:
-                    # Fall back to text generation if chat fails
-                    logger.debug(f"Chat completion failed, trying text generation: {chat_error}")
-                    response = client.text_generation(
-                        model=AI_MODEL,
-                        prompt=prompt,
-                        max_new_tokens=max_tokens,
-                        temperature=0.7,
-                        do_sample=True
-                    )
-                    response_text = response if isinstance(response, str) else str(response)
-
-        else:
-            # Fallback: use requests with the old API format
-            logger.warning("Using fallback requests method (install huggingface_hub for better support)")
-            import requests
-            import json
-
-            headers = {
-                'Authorization': f'Bearer {AI_API_KEY}'
+        headers = {
+            'Authorization': f'Bearer {AI_API_KEY}'
+        }
+        
+        api_url = f"https://api-inference.huggingface.co/models/{AI_MODEL}"
+        
+        # Build payload for text-generation or multimodal models
+        if image_bytes and len(image_bytes) > 0:
+            # Multimodal: encode image and include text
+            img_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            # Try to infer image type; default to JPEG
+            image_type = "jpeg"
+            
+            # Payload for vision-language models (image + question format)
+            payload = {
+                "inputs": {
+                    "image": img_base64,
+                    "question": prompt
+                },
+                "parameters": {
+                    "max_new_tokens": max_tokens
+                }
             }
-
-            api_url = f"https://api-inference.huggingface.co/models/{AI_MODEL}"
-
-            if image_bytes:
-                # Send multipart/form-data with file and text input
-                files = {
-                    'image': ('image.jpg', image_bytes)
+            headers['Content-Type'] = 'application/json'
+            
+            logger.debug(f"Sending multimodal request to {AI_MODEL} with image ({len(image_bytes)} bytes) and prompt")
+            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+        else:
+            # Text-only: use text-generation format
+            payload = {
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": max_tokens,
+                    "temperature": 0.7,
+                    "do_sample": True
                 }
-                data = {
-                    'inputs': prompt
-                }
-                response = requests.post(api_url, headers=headers, data=data, files=files, timeout=120)
+            }
+            headers['Content-Type'] = 'application/json'
+            
+            logger.debug(f"Sending text-only request to {AI_MODEL}")
+            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+        
+        # Log response status
+        logger.debug(f"API response status: {response.status_code}")
+        
+        # Handle HTTP errors
+        if response.status_code != 200:
+            error_detail = ""
+            try:
+                error_data = response.json()
+                if isinstance(error_data, dict):
+                    error_detail = error_data.get('error', str(error_data))
+                    if 'message' in error_data:
+                        error_detail = error_data['message']
+            except:
+                error_detail = response.text[:200] if response.text else "Unknown error"
+            
+            logger.error(f"HF API error {response.status_code}: {error_detail}")
+            
+            # Provide helpful error message
+            if "not a chat model" in error_detail.lower():
+                raise ValueError(
+                    f"Model {AI_MODEL} is a vision-language model. "
+                    "Please upload an image with your message, or use a different model."
+                )
+            elif response.status_code == 401:
+                raise ValueError("Authentication failed. Check your AI_API_KEY.")
+            elif response.status_code == 404:
+                raise ValueError(f"Model {AI_MODEL} not found or not accessible.")
             else:
-                headers['Content-Type'] = 'application/json'
-                payload = {
-                    "inputs": prompt,
-                    "parameters": {
-                        "max_new_tokens": max_tokens,
-                        "temperature": 0.7,
-                        "do_sample": True
-                    }
-                }
-                response = requests.post(api_url, headers=headers, json=payload, timeout=120)
-
-            response.raise_for_status()
-            data = response.json()
-
-            if isinstance(data, list) and len(data) > 0:
-                response_text = data[0].get('generated_text', str(data))
-            elif isinstance(data, dict):
-                # Some image models return {'answer': '...'} or {'generated_text': '...'}
-                if 'answer' in data:
-                    response_text = data.get('answer')
-                elif 'generated_text' in data:
-                    response_text = data.get('generated_text')
+                raise ValueError(f"API error: {error_detail}")
+        
+        # Parse response
+        data = response.json()
+        response_text = None
+        
+        # Handle different response formats
+        if isinstance(data, list) and len(data) > 0:
+            first = data[0]
+            if isinstance(first, dict):
+                # Try common keys: generated_text, answer, result
+                if 'generated_text' in first:
+                    response_text = first['generated_text']
+                elif 'answer' in first:
+                    response_text = first['answer']
                 else:
-                    response_text = str(data)
+                    response_text = str(first)
+            else:
+                response_text = str(first)
+        elif isinstance(data, dict):
+            if 'generated_text' in data:
+                response_text = data['generated_text']
+            elif 'answer' in data:
+                response_text = data['answer']
+            elif 'result' in data:
+                response_text = str(data['result'])
             else:
                 response_text = str(data)
-
+        else:
+            response_text = str(data)
+        
+        if not response_text:
+            raise ValueError("Empty response from API")
+        
         return format_response(response_text)
         
     except ValueError as ve:
         logger.error(f"Validation error: {ve}")
         raise
     except Exception as e:
-        logger.error(f"Error processing AI request: {e}")
+        logger.exception("Error processing AI request:")
         raise ValueError(f"AI service error: {str(e)}")
 
 def format_response(text: str) -> Dict[str, Any]:
